@@ -74,7 +74,9 @@ class NotificationService {
             data: { type: 'water_reminder' },
           },
           trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: triggerDate,
+            channelId: 'water',
           },
         });
         notificationIds.push(id);
@@ -97,7 +99,9 @@ class NotificationService {
         data: { type: 'medication_reminder' },
       },
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: time,
+        channelId: 'medication',
       },
     });
 
@@ -117,7 +121,9 @@ class NotificationService {
         data: { type: 'sleep_reminder' },
       },
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: triggerTime,
+        channelId: 'default',
       },
     });
 
