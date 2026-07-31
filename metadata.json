@@ -1,0 +1,8 @@
+{
+  "name": "RLT - Real Life Track 1.2",
+  "description": "A comprehensive health and wellness companion with AI-powered insights, nutrition tracking, and exercise logging.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
