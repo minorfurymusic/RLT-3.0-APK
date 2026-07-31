@@ -1,17 +1,41 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { HomeScreen } from './src/screens';
+import { View, Text, StyleSheet, ActivityIndicator, NativeModules, Platform } from 'react-native';
+import { HomeScreen, LoginScreen } from './src/screens';
 import { notificationService } from './src/services';
 import { AppProvider } from './src/context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     initializeApp();
   }, []);
+
+  const startForegroundService = () => {
+    if (Platform.OS === 'android' && NativeModules.ForegroundService) {
+      try {
+        NativeModules.ForegroundService.startService("Rastreando passos em segundo plano...");
+        console.log('[App] Foreground Service iniciado');
+      } catch (err) {
+        console.error('[App] Erro ao iniciar Foreground Service:', err);
+      }
+    }
+  };
+
+  const stopForegroundService = () => {
+    if (Platform.OS === 'android' && NativeModules.ForegroundService) {
+      try {
+        NativeModules.ForegroundService.stopService();
+        console.log('[App] Foreground Service parado');
+      } catch (err) {
+        console.error('[App] Erro ao parar Foreground Service:', err);
+      }
+    }
+  };
 
   const initializeApp = async () => {
     try {
@@ -21,11 +45,38 @@ export default function App() {
       // Schedule default reminders
       await notificationService.scheduleWaterReminder(2);
       
+      // Check login state
+      const loginState = await AsyncStorage.getItem('@user_logged_in');
+      if (loginState === 'true') {
+        setIsAuthenticated(true);
+        startForegroundService();
+      }
+      
       setIsLoading(false);
     } catch (err) {
       console.error('Error initializing app:', err);
       setError('Erro ao inicializar o aplicativo');
       setIsLoading(false);
+    }
+  };
+
+  const handleLoginSuccess = async () => {
+    try {
+      await AsyncStorage.setItem('@user_logged_in', 'true');
+      setIsAuthenticated(true);
+      startForegroundService();
+    } catch (err) {
+      console.error('Erro ao salvar estado de login:', err);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('@user_logged_in');
+      setIsAuthenticated(false);
+      stopForegroundService();
+    } catch (err) {
+      console.error('Erro ao deslogar:', err);
     }
   };
 
@@ -47,11 +98,15 @@ export default function App() {
     );
   }
 
+  if (!isAuthenticated) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <AppProvider>
       <View style={styles.container}>
         <StatusBar style="auto" />
-        <HomeScreen />
+        <HomeScreen onLogout={handleLogout} />
       </View>
     </AppProvider>
   );

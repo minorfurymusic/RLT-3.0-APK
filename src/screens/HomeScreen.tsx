@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Alert,
+  Platform,
+  StatusBar,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Card, Button, ProgressCircle } from '../components';
 import { COLORS, SPACING, FONT_SIZES, BORDER_RADIUS, DAILY_GOALS } from '../utils/constants';
@@ -19,6 +23,7 @@ import { MoodEntry } from '../types';
 
 interface HomeScreenProps {
   navigation?: any;
+  onLogout?: () => void;
 }
 
 const MOOD_OPTIONS: { emoji: string; mood: MoodEntry['mood'] }[] = [
@@ -29,15 +34,23 @@ const MOOD_OPTIONS: { emoji: string; mood: MoodEntry['mood'] }[] = [
   { emoji: '😴', mood: 'tired' },
 ];
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  const { state, addWater } = useApp();
+export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation, onLogout }) => {
+  const { state, addWater, addMeal } = useApp();
   const { steps, isAvailable: stepsAvailable, isLoading: stepsLoading } = useSteps();
   const [selectedMood, setSelectedMood] = useState<MoodEntry['mood'] | null>(null);
 
-  // Calorias e sono ainda não têm um serviço real por trás (nenhum sensor/
-  // integração implementada) - ficam zerados em vez de mostrar valor inventado.
+  // Estados dos modais de entrada
+  const [isWaterModalVisible, setIsWaterModalVisible] = useState(false);
+  const [isMealModalVisible, setIsMealModalVisible] = useState(false);
+
+  // Estados dos inputs de dados
+  const [waterAmount, setWaterAmount] = useState('250');
+  const [mealName, setMealName] = useState('Refeição');
+  const [mealWeight, setMealWeight] = useState('350');
+  const [mealCalories, setMealCalories] = useState('450');
+
   const water = state.water;
-  const calories = 0;
+  const calories = state.calories;
   const sleep = 0;
 
   const stepsProgress = steps / DAILY_GOALS.steps;
@@ -53,6 +66,65 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
 
     Alert.alert(result.success ? 'Real Life Track' : 'Não entendi', result.message);
+  };
+
+  const handleAvatarPress = () => {
+    if (onLogout) {
+      Alert.alert(
+        'Sair',
+        'Deseja sair da conta de testes?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Sair', style: 'destructive', onPress: onLogout },
+        ],
+        { cancelable: true }
+      );
+    }
+  };
+
+  const handleAddWaterSubmit = async () => {
+    const amount = parseInt(waterAmount, 10);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Erro', 'Por favor, insira uma quantidade de água válida e positiva em ml.');
+      return;
+    }
+    await addWater(amount);
+    setIsWaterModalVisible(false);
+    setWaterAmount('250');
+    Alert.alert('Sucesso', `💧 ${amount}ml de água registrados com sucesso!`);
+  };
+
+  const handleAddMealSubmit = async () => {
+    const weight = parseInt(mealWeight, 10);
+    const kcal = parseInt(mealCalories, 10);
+
+    if (!mealName.trim()) {
+      Alert.alert('Erro', 'Por favor, insira o nome da refeição.');
+      return;
+    }
+    if (isNaN(weight) || weight <= 0) {
+      Alert.alert('Erro', 'Por favor, insira um peso válido e positivo em gramas.');
+      return;
+    }
+    if (isNaN(kcal) || kcal <= 0) {
+      Alert.alert('Erro', 'Por favor, insira uma quantidade de calorias válida.');
+      return;
+    }
+
+    await addMeal(
+      mealName.trim(), 
+      kcal, 
+      Math.round(weight * 0.1), 
+      Math.round(weight * 0.4), 
+      Math.round(weight * 0.05)
+    );
+    setIsMealModalVisible(false);
+    
+    setMealName('Refeição');
+    setMealWeight('350');
+    setMealCalories('450');
+    
+    Alert.alert('Sucesso', `🍽️ Refeição "${mealName}" de ${weight}g (${kcal} kcal) registrada!`);
   };
 
   const handleMoodSubmit = async () => {
@@ -88,7 +160,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <Text style={styles.greeting}>{getGreeting()}! 👋</Text>
             <Text style={styles.date}>{formatDate(new Date())}</Text>
           </View>
-          <TouchableOpacity style={styles.avatar}>
+          <TouchableOpacity style={styles.avatar} onPress={handleAvatarPress}>
             <Text style={styles.avatarText}>JP</Text>
           </TouchableOpacity>
         </View>
@@ -148,13 +220,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>Ações Rápidas</Text>
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('beber agua')}>
+          <TouchableOpacity style={styles.quickAction} onPress={() => setIsWaterModalVisible(true)}>
             <View style={[styles.quickActionIcon, { backgroundColor: COLORS.info + '20' }]}>
               <Text style={styles.quickActionEmoji}>💧</Text>
             </View>
             <Text style={styles.quickActionText}>Água</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('comi uma refeicao')}>
+          <TouchableOpacity style={styles.quickAction} onPress={() => setIsMealModalVisible(true)}>
             <View style={[styles.quickActionIcon, { backgroundColor: COLORS.accent + '20' }]}>
               <Text style={styles.quickActionEmoji}>🍽️</Text>
             </View>
@@ -247,6 +319,111 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Modal de Água */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isWaterModalVisible}
+        onRequestClose={() => setIsWaterModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Card variant="elevated" style={styles.modalCard}>
+            <Text style={styles.modalTitle}>💧 Registrar Água</Text>
+            
+            <View style={styles.modalInputGroup}>
+              <Text style={styles.modalLabel}>Quantidade (ml)</Text>
+              <TextInput
+                style={styles.modalInput}
+                keyboardType="numeric"
+                placeholder="Ex: 250"
+                placeholderTextColor={COLORS.textLight}
+                value={waterAmount}
+                onChangeText={setWaterAmount}
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancelar"
+                variant="outline"
+                onPress={() => setIsWaterModalVisible(false)}
+                style={styles.modalButton}
+              />
+              <Button
+                title="Salvar"
+                variant="primary"
+                onPress={handleAddWaterSubmit}
+                style={styles.modalButton}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
+
+      {/* Modal de Refeição */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={isMealModalVisible}
+        onRequestClose={() => setIsMealModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Card variant="elevated" style={styles.modalCard}>
+            <Text style={styles.modalTitle}>🍽️ Registrar Refeição</Text>
+            
+            <View style={styles.modalInputGroup}>
+              <Text style={styles.modalLabel}>Nome da Refeição</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Ex: Almoço"
+                placeholderTextColor={COLORS.textLight}
+                value={mealName}
+                onChangeText={setMealName}
+              />
+            </View>
+
+            <View style={styles.modalInputGroup}>
+              <Text style={styles.modalLabel}>Peso (gramas)</Text>
+              <TextInput
+                style={styles.modalInput}
+                keyboardType="numeric"
+                placeholder="Ex: 350"
+                placeholderTextColor={COLORS.textLight}
+                value={mealWeight}
+                onChangeText={setMealWeight}
+              />
+            </View>
+
+            <View style={styles.modalInputGroup}>
+              <Text style={styles.modalLabel}>Calorias (kcal)</Text>
+              <TextInput
+                style={styles.modalInput}
+                keyboardType="numeric"
+                placeholder="Ex: 450"
+                placeholderTextColor={COLORS.textLight}
+                value={mealCalories}
+                onChangeText={setMealCalories}
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancelar"
+                variant="outline"
+                onPress={() => setIsMealModalVisible(false)}
+                style={styles.modalButton}
+              />
+              <Button
+                title="Salvar"
+                variant="primary"
+                onPress={handleAddMealSubmit}
+                style={styles.modalButton}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -255,6 +432,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   scrollView: {
     flex: 1,
@@ -439,6 +617,55 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.md,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: COLORS.surface,
+    padding: SPACING.lg,
+  },
+  modalTitle: {
+    fontSize: FONT_SIZES.lg,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+    textAlign: 'center',
+  },
+  modalInputGroup: {
+    marginBottom: SPACING.md,
+  },
+  modalLabel: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  modalInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    fontSize: FONT_SIZES.md,
+    color: COLORS.text,
+    backgroundColor: '#fafbfd',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: SPACING.md,
+  },
+  modalButton: {
+    flex: 1,
+    marginHorizontal: SPACING.xs,
+    height: 48,
   },
 });
 
