@@ -606,7 +606,8 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     
     let goalAdjustment = 0;
     if (fatLossGoal) {
-      goalAdjustment = -(fatLossGoal.targetValue || 500); 
+      const targetVal = Number(fatLossGoal.targetValue);
+      goalAdjustment = -(Number.isFinite(targetVal) ? targetVal : 500); 
     } else if (muscleGainGoal) {
       goalAdjustment = 300; 
     }
@@ -620,8 +621,10 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Total GASTO Target = Base + Atividade + Rotinas + Exercícios + Gym + Ajuste de Meta
-    // Note: Exercise, routine and gym calories are calculated as NET calories. Steps burned are tracked under burned_calories.
-    return baseTDEE + routineBurned + exerciseBurned + gymBurned + goalAdjustment;
+    // Clamped at a minimum of 1200 kcal for safety.
+    const rawTarget = baseTDEE + routineBurned + exerciseBurned + gymBurned + goalAdjustment;
+    const finalTarget = Number.isFinite(rawTarget) ? rawTarget : 2000;
+    return Math.max(1200, finalTarget);
   }, [profile, activities, routines, gymLogs, goals, historyRecords, calculateBMR, selectedDate]);
 
   const [performanceSnapshots, setPerformanceSnapshots] = useState<PerformanceSnapshot[]>(() => {
@@ -720,24 +723,23 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       // 1. Steps Score (20%)
       const stepGoal = profile.stepGoal || 10000;
       const steps = getTodayValue('steps');
-      const stepScore = Math.min(100, (steps / stepGoal) * 100);
+      const stepScore = stepGoal > 0 ? Math.min(100, (steps / stepGoal) * 100) : 100;
 
       // 2. Hydration Score (15%)
       const waterTarget = getDailyWaterTarget();
       const water = waterLogs
         .filter(w => new Date(w.date).toDateString() === today)
         .reduce((sum, w) => sum + w.amount, 0) / 1000;
-      const waterScore = Math.min(100, (water / waterTarget) * 100);
+      const waterScore = waterTarget > 0 ? Math.min(100, (water / waterTarget) * 100) : 100;
 
       // 3. Nutrition Score (20%)
       const calorieTarget = getDailyCalorieTarget();
       const consumed = meals
         .filter(m => new Date(m.date).toDateString() === today)
         .reduce((sum, m) => sum + m.calories, 0);
-      const calorieScore = consumed > 0 ? Math.max(0, 100 - Math.min(100, Math.abs((consumed - calorieTarget) / calorieTarget) * 100)) : 50;
+      const calorieScore = calorieTarget > 0 && consumed > 0 ? Math.max(0, 100 - Math.min(100, Math.abs((consumed - calorieTarget) / calorieTarget) * 100)) : 50;
 
       // 4. Exercise Score (20%)
-      // Based on completed routines today
       const todayWeekday = new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
       const routinesForDate = routines.filter(r => {
         if (r.skippedDates?.includes(selectedDate)) return false;
@@ -749,9 +751,10 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       });
       const completedRoutines = routinesForDate.filter(r => r.completed).length;
       const totalRoutines = routinesForDate.length;
-      const exerciseScore = totalRoutines > 0 ? (completedRoutines / totalRoutines) * 100 : 70;
+      const exerciseScore = totalRoutines > 0 ? (completedRoutines / totalRoutines) * 100 : 100;
 
       // 5. Mental Health Score (15%)
+      const mentalScore = Number.isFinite(mentalHealthScore) ? mentalHealthScore : 100;
       
       // 6. Medical Risk Factor (10%)
       const activeConditions = historyRecords.filter(r => r.category === 'Medical History' && (r as any).status === 'Active').length;
@@ -764,10 +767,10 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
         (waterScore * 0.15) + 
         (calorieScore * 0.20) + 
         (exerciseScore * 0.20) + 
-        (mentalHealthScore * 0.15) +
+        (mentalScore * 0.15) +
         (medicalScore * 0.10);
 
-      return Math.round(totalScore);
+      return Number.isFinite(totalScore) ? Math.round(totalScore) : 100;
     }
 
     return records
