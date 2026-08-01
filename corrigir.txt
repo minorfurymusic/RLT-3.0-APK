@@ -6,8 +6,145 @@ Este arquivo atua como o log de alterações e validações realizadas durante a
 portabilidade do app para paridade com o C-rebro e o Google Fit/Health Connect.
 
 --------------------------------------------------------------------------------
-[x] AUDITORIA DE SEGREDOS DE API (01/08/2026)
+[x] AUDITORIA DE SEGREDOS DE API (01/08/2026, por Claude)
   - Arquivos verificados: Histórico do Git (git log -p) e arquivos em disco (.env*)
   - Resumo: Auditoria de chaves concluída com sucesso. Nenhuma chave de API do Gemini literal (AIzaSy...) encontrada no repositório local ou no histórico do git.
   - Como validado: Varredura de expressões regulares executada nos logs e arquivos do disco.
+--------------------------------------------------------------------------------
+[x] REMOÇÃO DE CHAVE REAL DO FIREBASE COMMITADA (01/08/2026, por Claude)
+  - Achado: firebase-applet-config.json continha uma chave de API do
+    Firebase real e funcional, commitada e enviada ao GitHub pelo
+    antigravity depois da auditoria acima (não existia antes).
+  - Arquivos alterados: firebase-applet-config.json (removido, git rm),
+    vite.config.ts (novos defines FIREBASE_*), .env.example (documentado),
+    src/services/googleCalendarService.ts (config vem de process.env em
+    vez de import de JSON).
+  - Como validado: `npx tsc --noEmit` → 0 erros; `npm run build` → build
+    OK. `grep -r "firebase-applet-config" .` só retorna processo.txt
+    (histórico da auditoria), nenhum código mais referencia o arquivo.
+  - PENDENTE (exige ação do responsável do projeto, não código): a chave
+    antiga já está no histórico do git desta branch e no GitHub. Precisa
+    ser rotacionada no console do Firebase. Reescrever o histórico do git
+    não foi feito (ação destrutiva, precisa de confirmação explícita).
+
+[x] DESATIVAÇÃO DA TELEMETRIA SEM CONSENTIMENTO (01/08/2026, por Claude)
+  - Achado: telemetryService.checkAndSync rodava automaticamente em
+    App.tsx a cada usuário logado com onboarding completo, enviando dados
+    de saúde (condições, medicações, peso/altura/idade) para um webhook
+    externo a cada 7 dias, sem nenhuma tela de consentimento.
+  - Arquivo alterado: src/App.tsx (chamada removida; serviço mantido no
+    repo, só desconectado, para eventual consentimento explícito futuro).
+  - Como validado: `npx tsc --noEmit` → 0 erros; `npm run build` → build
+    OK; grep confirma zero outras chamadas a telemetryService.checkAndSync.
+
+[x] CÉREBRO — 6 BUGS CORRIGIDOS E VALIDADOS COM EXECUÇÃO REAL (01/08/2026,
+    por Claude)
+  - Arquivo alterado: src/lib/brainOrchestrator.ts
+  - Bugs corrigidos:
+    1. Segmentação de multi-intenção nunca separava por "e" (nova função
+       splitByConjunction, com detecção de domínio independente por lado).
+    2. Classificação de domínio nunca reconhecia "objetivo"/"meta" como
+       gatilho de PERFIL (mapa GOAL_MAPPINGS compartilhado, novo ramo em
+       detectDomain).
+    3. Regex de limpeza de nome de exercício sem word boundary comia parte
+       da palavra "supino" (adicionado \b).
+    4. Nome de medicamento sobrava com "a partir de"/"desde" no final
+       (novo replace de conectores residuais).
+    5. "Read-back" da ação ZERO de água relia estado pré-mutação (React
+       setState assíncrono) e reportava o total errado — agora reporta o
+       valor conhecido (0) diretamente.
+    6. Harness de teste original (brainOrchestratorTest.ts) reportava
+       allPassed:false e foi marcado como pronto mesmo assim.
+  - Como validado (execução real, não só leitura de código): script de
+    teste rodado via `npx tsx` contra um HealthContext mockado, executando
+    os EXEMPLOS LITERAIS citados neste documento:
+      • "bebi 200ml de água e fiz supino com 40kg" → 2 segmentos [WATER,
+        GYM] gerados, ambos registrados (waterLogs:1, gymLogs:1). ANTES:
+        1 segmento, só a água era salva.
+      • "meu objetivo agora é emagrecimento" → profile.goal muda para
+        "Weight Loss". ANTES: classificava como QUERY, não mudava nada.
+      • "Registre supino reto 30 kg 45 repetições." → nome salvo "Supino
+        Reto". ANTES: "Supi .".
+      • "Tomando Losartana 50mg a partir de 15/07" → nome salvo
+        "Losartana". ANTES: "Losartana a partir de".
+      • "zere a água de hoje" com 800ml registrados → resposta "Total: 0
+        ml" e waterLogs vazio. ANTES: resposta "Total: 800 ml" (valor
+        errado) mesmo com os registros de fato apagados.
+    Resultado: 6/6 testes passaram. Script de teste era temporário e foi
+    apagado do repositório após a validação (não faz parte do app).
+    Adicionalmente, rodei de novo o harness original do antigravity
+    (`runFullTransactionalTestSuite()` de brainOrchestratorTest.ts):
+    `allPassed: true` (antes: `false`), todos os 8 cenários passando,
+    incluindo a FASE 6 (comando composto de 5 domínios) que antes falhava.
+
+[x] LOGGER E VERSION.TS DESATIVADOS/QUEBRADOS PARA CONTEXTO NATIVO
+    (01/08/2026, por Claude)
+  - Arquivos alterados: src/main.tsx, src/lib/version.ts,
+    src/components/DiagnosticModal.tsx
+  - Bugs corrigidos:
+    1. initGlobalErrorLogger() nunca era chamado — captura global de erro
+       não rodava de verdade no app publicado. Agora é chamado no boot em
+       main.tsx.
+    2. fetchLiveDiagnostics() em version.ts tentava fetch('/api/health'),
+       endpoint que nunca existiu neste app nativo (código copiado da
+       versão web sem adaptar) — sempre reportava "INDISPONÍVEL" como se
+       fosse um erro. Removida a tentativa; status agora é 'N/A',
+       DiagnosticModal.tsx atualizado para mostrar "App nativo, sem
+       servidor" em vez de "Erro".
+  - Como validado: `npx tsc --noEmit` → 0 erros; `npm run build` → build
+    OK.
+
+[x] ERRORBOUNDARY GLOBAL CONECTADO (01/08/2026, por Claude)
+  - Arquivo alterado: src/main.tsx
+  - Bug corrigido: ErrorBoundary.tsx existia mas main.tsx renderizava
+    <App/> sem nenhum wrapper de erro — uma exceção não tratada
+    branqueava o app inteiro sem recuperação.
+  - Como validado: `npx tsc --noEmit` → 0 erros; `npm run build` → build
+    OK. Validação funcional (disparar uma exceção real em runtime e
+    confirmar que a tela de recuperação aparece) NÃO foi feita — requer
+    rodar o app de verdade, não só compilar.
+
+[x] LIB/AI.TS — REQUISIÇÃO DE REDE INÚTIL REMOVIDA (01/08/2026, por
+    Claude)
+  - Arquivo alterado: src/lib/ai.ts
+  - Bug corrigido: toda chamada de IA tentava primeiro POST em
+    '/api/gemini' (endpoint que só existe na versão web de referência,
+    inexistente neste app nativo), sempre falhando antes de cair no SDK
+    direto — uma requisição de rede desperdiçada em toda mensagem enviada
+    ao Cérebro. Removida a tentativa; vai direto para o SDK client-side.
+  - NÃO CORRIGIDO (decisão consciente, fora de escopo desta rodada): a
+    causa raiz arquitetural da chave exposta no bundle do cliente
+    continua — vite.config.ts ainda injeta process.env.GEMINI_API_KEY se
+    definida em build. Resolver de verdade exige proxy de servidor real
+    ou exigir chave própria do usuário. Ver processo.txt Parte 5.
+  - Como validado: `npx tsc --noEmit` → 0 erros; `npm run build` → build
+    OK.
+
+[x] HEALTH SCORE — PROTEÇÃO CONTRA NaN (01/08/2026, por Claude)
+  - Arquivo alterado: src/components/Home.tsx
+  - Bug corrigido: calculateHealthScore() não tinha nenhuma proteção
+    contra NaN/Infinity — um stepGoal de 0/undefined gerava
+    todaySteps/0 = Infinity ou NaN, propagando pro score final. Agora
+    cada parcela passa por um helper addIfFinite() e o resultado final é
+    limitado entre 0 e 100. stepGoal inválido cai num padrão de 10000.
+  - Como validado: `npx tsc --noEmit` → 0 erros; `npm run build` → build
+    OK.
+
+[x] HEALTH CONNECT — PERMISSÃO REALMENTE SOLICITADA (01/08/2026, por
+    Claude) — CORRIGIDO NO CÓDIGO, NÃO VALIDADO EM APARELHO REAL
+  - Arquivo alterado: src/components/SystemPermissionsModal.tsx
+  - Bug corrigido: o botão "Conceder Tudo" nunca chamava
+    healthConnectService.requestPermissions() — a autorização do Health
+    Connect nunca era solicitada de verdade, então toda leitura de
+    passos/calorias/frequência cardíaca falhava silenciosamente e o app
+    caía pro acelerômetro caseiro sem nenhuma validação. Agora o botão
+    chama a permissão real (com timeout de 4s) e reflete o resultado real
+    (sem otimismo — se negado, mostra "Pendente"). Adicionado card de UI
+    dedicado para Health Connect.
+  - Como validado: `npx tsc --noEmit` → 0 erros; `npm run build` → build
+    OK. NÃO VALIDADO: este ambiente não tem aparelho/emulador Android com
+    Health Connect instalado — não foi possível confirmar que o diálogo
+    de permissão nativo aparece de verdade nem que dados reais chegam
+    depois de concedida. Precisa de teste de campo antes de considerar a
+    Parte 2.2 do processo.txt completa.
 --------------------------------------------------------------------------------

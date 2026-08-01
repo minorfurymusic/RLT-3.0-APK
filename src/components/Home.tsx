@@ -92,29 +92,40 @@ export default function Home() {
 
   const calculateHealthScore = () => {
     let score = 0;
-    
+
+    // Soma só valores numéricos válidos — protege contra NaN se
+    // profile.stepGoal for 0/undefined, ou qualquer outra entrada
+    // corrompida se propagar até aqui (defesa em profundidade, pedida
+    // explicitamente em processo.txt 3.3, já que a causa raiz em
+    // getDailyCalorieTarget foi corrigida mas essa fórmula não tinha
+    // proteção própria).
+    const addIfFinite = (value: number) => {
+      if (Number.isFinite(value)) score += value;
+    };
+
     // 1. Exercise (25 points)
-    const stepProgress = Math.min(1, todaySteps / profile.stepGoal);
-    score += stepProgress * 15;
+    const stepGoal = profile.stepGoal && profile.stepGoal > 0 ? profile.stepGoal : 10000;
+    const stepProgress = Math.min(1, todaySteps / stepGoal);
+    addIfFinite(stepProgress * 15);
     const completedRoutines = activeRoutines.filter(r => r.completed).length;
-    score += (completedRoutines / Math.max(1, activeRoutines.length)) * 10;
+    addIfFinite((completedRoutines / Math.max(1, activeRoutines.length)) * 10);
 
     // 2. Nutrition (25 points)
     const calorieDiff = Math.abs(todayCalories - dailyCalorieTarget);
     const calorieScore = Math.max(0, 25 - (calorieDiff / 100));
-    score += calorieScore;
+    addIfFinite(calorieScore);
 
     // 3. Medical (20 points)
     const medicalRecords = historyRecords.length;
-    score += Math.min(20, medicalRecords * 2);
+    addIfFinite(Math.min(20, medicalRecords * 2));
 
     // 4. Mental Well-Being (15 points)
-    score += (mentalHealthScore / 100) * 15;
+    addIfFinite((mentalHealthScore / 100) * 15);
 
     // 5. Sleep (15 points)
     score += 12;
 
-    return Math.round(score);
+    return Math.round(Math.min(100, Math.max(0, score)));
   };
 
   const healthScore = calculateHealthScore();

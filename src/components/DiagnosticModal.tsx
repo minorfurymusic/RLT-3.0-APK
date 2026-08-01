@@ -87,11 +87,11 @@ export default function DiagnosticModal({ isOpen, onClose }: DiagnosticModalProp
             badge={status?.serverVersion === status?.buildVersion ? "Sincronizado" : "Verificando"} 
             icon={<ShieldCheck className="size-4 text-indigo-500" />} 
           />
-          <StatusCard 
-            label="Servidor Express" 
-            value={status?.serverStatus || "Buscando..."} 
-            badge={status?.serverStatus === 'OK' ? `Uptime: ${status.serverUptime}s` : "Erro"} 
-            icon={<Server className="size-4 text-emerald-500" />} 
+          <StatusCard
+            label="Backend"
+            value={status?.serverStatus || "Buscando..."}
+            badge={status?.serverStatus === 'OK' ? `Uptime: ${status.serverUptime}s` : status?.serverStatus === 'N/A' ? "App nativo, sem servidor" : "Erro"}
+            icon={<Server className="size-4 text-emerald-500" />}
           />
           <StatusCard 
             label="Cache Storage" 

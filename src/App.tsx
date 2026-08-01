@@ -19,17 +19,16 @@ import PrivacySecurity from './components/PrivacySecurity';
 import LanguageRegional from './components/LanguageRegional';
 import HelpSupport from './components/HelpSupport';
 import { HealthProvider, useHealth } from './context/HealthContext';
-import { telemetryService } from './services/telemetryService';
+// NOTA (01/08/2026, Claude): a chamada automática a telemetryService.checkAndSync
+// foi removida daqui de propósito. Esse serviço envia dados de saúde do
+// usuário (condições, medicações, peso/altura/idade) para um webhook externo
+// a cada 7 dias sem nenhuma tela de consentimento no app — nunca foi pedido
+// e é um risco real de LGPD. Ver processo.txt Parte 6.2. Não reativar sem
+// antes construir uma tela de consentimento explícito (opt-in, não opt-out).
 
 function AppRoutes() {
-  const { profile, historyRecords, meals, waterLogs, activities } = useHealth();
+  const { profile } = useHealth();
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('health_login') === 'true');
-
-  React.useEffect(() => {
-    if (isLoggedIn && profile.onboardingCompleted) {
-      telemetryService.checkAndSync(profile, historyRecords, meals, waterLogs, activities);
-    }
-  }, [isLoggedIn, profile, historyRecords, meals, waterLogs, activities]);
 
   if (!isLoggedIn) {
     return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;

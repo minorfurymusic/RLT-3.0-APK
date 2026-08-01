@@ -24,7 +24,7 @@ export interface LiveDiagnosticStatus {
   serverVersion: string;
   serverUptime: number;
   serverPort: number;
-  serverStatus: 'OK' | 'INDISPONÍVEL';
+  serverStatus: 'OK' | 'INDISPONÍVEL' | 'N/A';
   components: Record<string, ComponentRuntimeRecord>;
   cacheCount: number;
   cacheNames: string[];
@@ -96,23 +96,16 @@ export function useRegisterComponentRuntime(name: string) {
 
 // Perform live runtime diagnostics dynamically
 export async function fetchLiveDiagnostics(): Promise<LiveDiagnosticStatus> {
-  let serverVersion = "DESCONHECIDO";
+  let serverVersion = "N/A";
   let serverUptime = 0;
   let serverPort = 3000;
-  let serverStatus: 'OK' | 'INDISPONÍVEL' = 'INDISPONÍVEL';
-
-  try {
-    const res = await fetch('/api/health');
-    if (res.ok) {
-      const data: ServerHealthResponse = await res.json();
-      serverVersion = data.version || "0.0.0";
-      serverUptime = data.uptime || 0;
-      serverPort = data.port || 3000;
-      serverStatus = data.status === 'ok' ? 'OK' : 'INDISPONÍVEL';
-    }
-  } catch (err) {
-    console.warn('[RLT DIAGNÓSTICO] Falha ao consultar endpoint de servidor /api/health:', err);
-  }
+  // Este é um app nativo (Capacitor/Android), não a versão web de
+  // referência: não existe (nem deve existir) um endpoint /api/health
+  // rodando junto com o app. Tentar chamá-lo sempre falhava e reportava
+  // "INDISPONÍVEL" como se algo estivesse quebrado, quando na verdade é o
+  // comportamento esperado nesta arquitetura. 'N/A' deixa isso claro em
+  // vez de parecer um erro.
+  let serverStatus: 'OK' | 'INDISPONÍVEL' | 'N/A' = 'N/A';
 
   // SW Status
   let swStatus: 'DESATIVADO' | 'ATIVO' | 'LIMPANDO' = 'DESATIVADO';
@@ -148,10 +141,7 @@ export async function fetchLiveDiagnostics(): Promise<LiveDiagnosticStatus> {
   let inconsistencyDetected = false;
   let inconsistencyReason: string | undefined = undefined;
 
-  if (serverStatus === 'OK' && serverVersion !== APP_BUILD_VERSION) {
-    inconsistencyDetected = true;
-    inconsistencyReason = `Divergência de Versão: Servidor (${serverVersion}) ≠ Build (${APP_BUILD_VERSION})`;
-  } else if (swRegistrationCount > 0) {
+  if (swRegistrationCount > 0) {
     inconsistencyDetected = true;
     inconsistencyReason = `Service Worker Ativo Detectado (${swRegistrationCount} registro(s)). Pode reter cache antigo.`;
   } else if (cacheCount > 0) {

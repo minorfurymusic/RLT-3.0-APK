@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Shield, Footprints, Bell, MapPin, CheckCircle2, AlertCircle, Smartphone } from './Icons';
+import { X, Shield, Footprints, Bell, MapPin, CheckCircle2, AlertCircle, Smartphone, Heart } from './Icons';
 import { useHealth } from '../context/HealthContext';
 import { sensorService } from '../services/sensorService';
 import { locationService } from '../services/locationService';
+import { healthConnectService } from '../services/healthConnectService';
 import { safeLocalStorage } from '../lib/utils';
 
 interface SystemPermissionsModalProps {
@@ -18,6 +19,7 @@ export default function SystemPermissionsModal({ isOpen, onClose }: SystemPermis
   const [sensorGranted, setSensorGranted] = useState(false);
   const [notificationGranted, setNotificationGranted] = useState(false);
   const [locationGranted, setLocationGranted] = useState(false);
+  const [healthConnectGranted, setHealthConnectGranted] = useState(false);
   const [isGranting, setIsGranting] = useState(false);
   const [grantSuccess, setGrantSuccess] = useState(false);
 
@@ -41,6 +43,7 @@ export default function SystemPermissionsModal({ isOpen, onClose }: SystemPermis
         if (parsed.sensor) setSensorGranted(true);
         if (parsed.notification) setNotificationGranted(true);
         if (parsed.location) setLocationGranted(true);
+        if (parsed.healthConnect) setHealthConnectGranted(true);
       } catch (e) {
         console.error('Error parsing permission states:', e);
       }
@@ -87,12 +90,27 @@ export default function SystemPermissionsModal({ isOpen, onClose }: SystemPermis
       console.warn('Location permission notice:', e);
     }
 
+    // 4. Health Connect (passos/calorias/frequência cardíaca/sono/peso).
+    // ANTES: este botão nunca chamava healthConnectService.requestPermissions()
+    // — a autorização do Health Connect nunca era solicitada de verdade, então
+    // toda leitura falhava silenciosamente e o app caía pro acelerômetro
+    // caseiro. Diferente dos itens acima, aqui usamos o resultado REAL (sem
+    // fallback otimista para `true`), porque é exatamente esse "marcar como
+    // concedido sem confirmar de verdade" que causou o bug em primeiro lugar.
+    let healthConnectResult = false;
+    try {
+      healthConnectResult = await withTimeout(healthConnectService.requestPermissions(), false, 4000);
+    } catch (e) {
+      console.warn('Health Connect permission notice:', e);
+    }
+
     setSensorGranted(true);
     setNotificationGranted(true);
     setLocationGranted(true);
+    setHealthConnectGranted(healthConnectResult);
 
     // Save state
-    const states = { sensor: true, notification: true, location: true };
+    const states = { sensor: true, notification: true, location: true, healthConnect: healthConnectResult };
     safeLocalStorage.setItem('health_permissions_prompted', 'true');
     safeLocalStorage.setItem('health_permissions_granted', 'true');
     safeLocalStorage.setItem('health_permission_states', JSON.stringify(states));
@@ -256,7 +274,46 @@ export default function SystemPermissionsModal({ isOpen, onClose }: SystemPermis
                   {locationGranted ? (isPt ? 'Liberado' : 'Granted') : (isPt ? 'Pendente' : 'Pending')}
                 </span>
               </div>
+
+              {/* 4. Health Connect */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="size-8 sm:size-9 rounded-xl bg-rose-100 dark:bg-rose-900/30 text-rose-600 flex items-center justify-center shrink-0">
+                    <Heart className="size-4.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate">
+                      {isPt ? 'Health Connect' : 'Health Connect'}
+                    </h4>
+                    <p className="text-[10px] text-slate-500 leading-tight truncate">
+                      {isPt
+                        ? 'Passos, calorias, batimentos, sono e peso reais'
+                        : 'Real steps, calories, heart rate, sleep & weight'}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 ${
+                    healthConnectGranted
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                  }`}
+                >
+                  {healthConnectGranted ? <CheckCircle2 className="size-3" /> : <AlertCircle className="size-3" />}
+                  {healthConnectGranted ? (isPt ? 'Liberado' : 'Granted') : (isPt ? 'Pendente' : 'Pending')}
+                </span>
+              </div>
             </div>
+
+            {!healthConnectGranted && (
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 rounded-xl">
+                <p className="text-[10px] text-amber-800 dark:text-amber-300 leading-snug">
+                  {isPt
+                    ? 'Sem o Health Connect, os passos exibidos vêm de um contador por acelerômetro no próprio app, que é menos preciso.'
+                    : "Without Health Connect, steps shown come from the app's own accelerometer counter, which is less precise."}
+                </p>
+              </div>
+            )}
 
             {grantSuccess && (
               <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center">

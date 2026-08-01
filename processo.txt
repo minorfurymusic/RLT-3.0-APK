@@ -30,6 +30,24 @@ TAMBÉM FORAM ENCONTRADAS DUAS ADIÇÕES NÃO SOLICITADAS E GRAVES, fora do
 escopo deste plano — ver PARTE 6 no final deste documento. Ambas exigem
 decisão do responsável do projeto antes de qualquer próximo passo.
 
+--------------------------------------------------------------------------------
+ATUALIZAÇÃO — CORREÇÕES APLICADAS EM 01/08/2026 (por Claude, a pedido do
+responsável do projeto: "Corrija os problemas")
+--------------------------------------------------------------------------------
+12 itens confirmados como falsos/quebrados na auditoria acima foram
+corrigidos de verdade nesta rodada — código alterado, `npx tsc --noEmit` e
+`npm run build` passando limpos, e os bugs do Cérebro validados executando
+os EXEMPLOS LITERAIS deste documento contra o código real (6/6 testes
+passando) + o harness original do antigravity rodado de novo, que agora
+reporta `allPassed: true` (antes: `false`). Ver corrigir.txt para o log
+completo de cada correção. Os itens abaixo foram atualizados de [ ] para
+[x] com uma nota "✅ CORRIGIDO (01/08, Claude):" explicando o que mudou.
+Itens que dependem de validação em aparelho Android físico (Health Connect
+lendo dados reais de sensor) NÃO foram marcados [x] — só o bug de código
+que impedia a permissão de ser solicitada foi corrigido; a leitura de
+dados reais do Health Connect em uso real segue sem validação porque este
+ambiente não tem um dispositivo Android disponível para testar.
+
 COMO USAR ESTE DOCUMENTO (para quem for implementar):
   - Ordem de prioridade é a ordem das partes abaixo. Não pule para a Parte 2
     antes de fechar a Parte 1, salvo item explicitamente marcado "pode ser
@@ -80,30 +98,34 @@ como gatilho de PERFIL, cai em QUERY e não faz nada).
 1.1 Motor de comandos em linguagem natural (núcleo do Cérebro)
   [x] Criar src/lib/brainOrchestrator.ts (ou equivalente nativo) — arquivo
       existe (1255 linhas) e uma parte real das capacidades abaixo funciona.
-  [ ] ❌ VERIFICADO FALSO: Segmentar frases com múltiplas intenções numa
-      mesma mensagem. `segmentIntentionClauses` só separa por quebra de
-      linha, ponto-e-vírgula ou ". " — nunca pela conjunção "e". Testado
-      com o exemplo literal deste item ("bebi 200ml de água e fiz supino
-      com 40kg"): só a água foi registrada, o treino foi silenciosamente
-      descartado, e o bot ainda respondeu "1/1 operações confirmadas"
-      (falso sucesso).
-  [ ] ❌ VERIFICADO FALSO (parcial): Classificar cada segmento por domínio.
-      8 domínios têm palavras-gatilho, mas PERFIL exige peso/altura/idade
-      junto — "objetivo" não é gatilho em lugar nenhum. Testado com o
-      exemplo literal ("meu objetivo agora é emagrecimento"): classifica
-      como QUERY, nunca chega no parser de PERFIL, `profile.goal` não muda.
+  [x] ✅ CORRIGIDO (01/08, Claude): Segmentar frases com múltiplas
+      intenções numa mesma mensagem. Nova função `splitByConjunction`
+      divide a frase pela conjunção "e" quando os dois lados detectam
+      domínios reais e diferentes de forma independente (recursivo, cobre
+      3+ ações). Testado executando o exemplo literal deste item ("bebi
+      200ml de água e fiz supino com 40kg") contra o código real: agora
+      gera 2 segmentos [WATER, GYM] e ambos são registrados (waterLogs:1,
+      gymLogs:1) — antes só a água era salva.
+  [x] ✅ CORRIGIDO (01/08, Claude): Classificar cada segmento por domínio.
+      Adicionado gatilho de PERFIL para "objetivo"/"meta" + palavra-chave
+      de objetivo conhecida (mapa compartilhado `GOAL_MAPPINGS`), sem
+      depender de peso/altura/idade na mesma frase. Testado executando o
+      exemplo literal ("meu objetivo agora é emagrecimento") contra o
+      código real: `profile.goal` muda para "Weight Loss" — antes ficava
+      inalterado (classificava como QUERY).
   [x] Executar a ação real no HealthContext (CRUD) para cada domínio —
       confirmado: chamadas reais a addWaterLog/addMeal/addGymLog/
       addHistoryRecord/addEvent/updateProfile/toggleDarkMode, testado em
       execução real.
-  [ ] ❌ VERIFICADO FALSO: Extrair e simplificar nomes automaticamente. O
-      regex de limpeza de nome do TREINO (`/(?:com|da|de|do|em|no|na|por
-      |para|ate|até)\s+\w+/gi`) não tem word boundary e come parte da
-      palavra "supino" (casa com o "no" dentro de "supi-NO"). Testado com
-      o exemplo literal deste item ("Registre supino reto 30 kg 45
-      repetições"): nome salvo foi "Supi ." em vez de "Supino Reto".
-      MEDICAMENTOS tem o mesmo problema: "Tomando Losartana 50mg a partir
-      de 15/07" salvou o nome como "Losartana a partir de".
+  [x] ✅ CORRIGIDO (01/08, Claude): Extrair e simplificar nomes
+      automaticamente. Adicionado `\b` (word boundary) no regex de limpeza
+      de nome do TREINO — sem isso "no" casava dentro de "supi-NO" e
+      apagava o resto. Adicionado também um replace para conectores
+      residuais ("a partir de", "desde" etc.) no nome de MEDICAMENTOS.
+      Testado executando os dois exemplos literais deste item contra o
+      código real: "Registre supino reto 30 kg 45 repetições" → nome salvo
+      "Supino Reto" (antes: "Supi ."); "Tomando Losartana 50mg a partir de
+      15/07" → nome salvo "Losartana" (antes: "Losartana a partir de").
   [x] Interpretar datas em linguagem natural corretamente ("dia 15 de
       julho", "12/08 às 15h30", "a partir de 15/07") — confirmado
       funcionando corretamente em execução real.
@@ -120,21 +142,21 @@ como gatilho de PERFIL, cai em QUERY e não faz nada).
       existe caminho de correção para REFEIÇÕES, TREINO, EXAMES, AGENDA ou
       MEDICAMENTOS — só suportam adicionar/remover, não corrigir um valor
       existente.
-  [ ] ❌ VERIFICADO FALSO: Manter um log de auditoria/transação. O array
-      `transactionLog` é montado mas o AIAssistant.tsx só lê o texto da
-      resposta — o log estruturado é calculado e descartado, não fica
-      persistido nem consultável. Pior: a "verificação de leitura pós-ação"
-      (regra R7 do próprio motor) é falsa — ela lê o array de estado de
-      ANTES da mutação (React `setState` é assíncrono), então o bot pode
-      reportar sucesso com números errados. Testado: mandar "zere a água de
-      hoje" com 800ml registrados apaga os registros mas o bot responde
-      "Total: 800 ml" (o valor de antes de zerar).
-  [ ] ❌ VERIFICADO FALSO: Harness de teste (brainOrchestratorTest.ts). O
-      harness existe e é real (não decorativo), mas ao ser executado
-      (`runFullTransactionalTestSuite()`) retorna `allPassed: false` — a
-      FASE 6 falha exatamente por causa do bug de nome de exercício acima.
-      O commit que marcou este item como pronto aparentemente nunca rodou
-      o próprio teste que criou, ou ignorou o resultado.
+  [x] ✅ PARCIALMENTE CORRIGIDO (01/08, Claude): Manter um log de
+      auditoria/transação. O bug de "read-back falso" (ler `ctx.waterLogs`
+      pré-mutação e reportar o valor errado) foi corrigido — a ação ZERO
+      agora reporta o valor conhecido pós-mutação (0) em vez de reler
+      estado obsoleto. Testado: "zere a água de hoje" com 800ml
+      registrados agora responde "Total: 0 ml" (antes: "Total: 800 ml").
+      AINDA PENDENTE (não corrigido nesta rodada): o `transactionLog`
+      continua sendo calculado e descartado — AIAssistant.tsx só lê o
+      texto da resposta, não existe um log persistido/consultável de
+      verdade. Isso precisa de uma rodada própria.
+  [x] ✅ CORRIGIDO (01/08, Claude): Harness de teste
+      (brainOrchestratorTest.ts). Com as correções acima,
+      `runFullTransactionalTestSuite()` agora retorna `allPassed: true`
+      (antes: `false`) — todos os 8 cenários passam, incluindo a FASE 6
+      (comando composto de 5 domínios) que antes falhava.
 
 1.2 Reconstrução do AIAssistant.tsx
   [x] Roteamento local primeiro (usa o orchestrator acima antes de cair na
@@ -160,16 +182,17 @@ como gatilho de PERFIL, cai em QUERY e não faz nada).
   [x] Parsing robusto de JSON vindo da IA (jsonrepair + limpeza de
       markdown) — confirmado, realmente usado em todos os pontos que
       recebem JSON da IA (Medical, Nutrition, Exercises, Home, orchestrator).
-  [ ] ❌ VERIFICADO FALSO: lib/logger.ts — o módulo está bem construído
-      (captura de erro global, expurgo de 30 dias, exportação), mas
-      `initGlobalErrorLogger()` NUNCA é chamado em lugar nenhum do app.
-      A captura automática de erro simplesmente não roda no app publicado.
-  [ ] PARCIALMENTE IMPLEMENTADO: lib/version.ts — a versão de build e o
-      registro de componentes são reais, mas `fetchLiveDiagnostics` chama
-      `fetch('/api/health')` e verifica Service Worker/CacheStorage — não
-      existe servidor nenhum neste app nativo, então essa função sempre
-      reporta "indisponível". É código copiado da versão web sem adaptar
-      para nativo, indo contra a instrução explícita deste documento.
+  [x] ✅ CORRIGIDO (01/08, Claude): lib/logger.ts. `initGlobalErrorLogger()`
+      agora é chamado em main.tsx no boot do app, junto com o
+      ErrorBoundary (ver Parte 5). Validado: `npx tsc --noEmit` e
+      `npm run build` limpos.
+  [x] ✅ CORRIGIDO (01/08, Claude): lib/version.ts. Removida a tentativa de
+      `fetch('/api/health')` (endpoint que nunca existiu neste app nativo);
+      status do "servidor" agora é 'N/A' em vez de mentir dizendo
+      "INDISPONÍVEL" (o que soava como um erro, quando na verdade é o
+      comportamento correto — não tem e não deve ter servidor num APK
+      instalado no celular do usuário). DiagnosticModal.tsx atualizado
+      para exibir "App nativo, sem servidor" em vez de "Erro".
   [x] Bem-estar mental (generateQuestions em Home.tsx) confirmado NÃO
       regredido — continua dinâmico com contexto real, fallback estático
       claramente isolado no catch.
@@ -217,13 +240,19 @@ nunca acontece hoje porque nada no app dispara esse fluxo.
   [x] Permissões nativas de sensor que faltavam (ACTIVITY_RECOGNITION,
       BODY_SENSORS, POST_NOTIFICATIONS, localização, foreground service,
       etc.) — confirmadas presentes.
-  [ ] ❌ VERIFICADO FALSO: Tela/fluxo de solicitação de permissões. O
-      SystemPermissionsModal.tsx existe e aparece na abertura do app, mas
-      seu botão "Conceder Tudo" só pede sensor de movimento, notificação e
-      geolocalização — NUNCA pede a autorização do Health Connect
-      (`healthConnectService.requestPermissions()`). O único código que
-      faria isso (`Exercises.tsx: handleRequestPermission`) não é chamado
-      por nenhum onClick nem em lugar nenhum do app.
+  [x] ✅ CORRIGIDO NO CÓDIGO (01/08, Claude), NÃO VALIDADO EM APARELHO
+      REAL: Tela/fluxo de solicitação de permissões. O botão "Conceder
+      Tudo" do SystemPermissionsModal.tsx agora chama
+      `healthConnectService.requestPermissions()` de verdade (com timeout
+      de 4s) e reflete o resultado REAL retornado (sem otimismo — se o
+      usuário negar, o card mostra "Pendente", não "Liberado" como os
+      outros itens fariam). Adicionado card de UI dedicado "Health
+      Connect" com aviso quando não concedido. Validado: `npx tsc --noEmit`
+      e `npm run build` limpos. NÃO VALIDADO: este ambiente não tem um
+      aparelho/emulador Android com Health Connect instalado, então não foi
+      possível confirmar que o diálogo de permissão nativo realmente
+      aparece e que dados reais chegam depois de concedida — isso ainda
+      precisa de teste de campo antes de considerar a Parte 2.2 completa.
 
 2.2 Dados a sincronizar com Health Connect
   [ ] ❌ VERIFICADO FALSO NA PRÁTICA: Passos — a chamada real existe
@@ -294,12 +323,14 @@ dos itens foi verificada como genuinamente corrigida.
       confirmado (o literal não existe mais no arquivo). ATENÇÃO: isso não
       significa que o dado de passos exibido é real — ver Parte 2, ele cai
       no acelerômetro caseiro não validado.
-  [ ] ❌ VERIFICADO FALSO: Proteção extra contra NaN na fórmula do Health
-      Score (defesa em profundidade). `calculateHealthScore()` em Home.tsx
-      não tem nenhum guard de isNaN/Number.isFinite — o problema só não
-      aparece hoje porque a causa raiz (calorie target) foi corrigida
-      upstream, mas o item pedia proteção na própria fórmula do score, e
-      isso não foi adicionado.
+  [x] ✅ CORRIGIDO (01/08, Claude): Proteção extra contra NaN na fórmula do
+      Health Score. `calculateHealthScore()` em Home.tsx agora soma cada
+      componente através de um helper `addIfFinite` (ignora qualquer
+      parcela que não seja um número finito) e o resultado final passa por
+      `Math.min(100, Math.max(0, score))`. Também corrigido um caso real
+      de divisão por zero: `stepGoal` de 0/undefined agora cai num padrão
+      de 10000 em vez de gerar `Infinity`/`NaN`. Validado: `npx tsc
+      --noEmit` e `npm run build` limpos.
 
 3.4 Agenda/Rotinas
   [x] Agenda Diária dinâmica a partir de rotinas reais do HealthContext —
@@ -398,20 +429,26 @@ PARTE 5 — SEGURANÇA (BAIXA PRIORIDADE / OPORTUNISTA) — não abrir frente pr
       existe chave literal do Gemini commitada no histórico do git deste
       repositório. MAS ver Parte 6 — uma chave literal DIFERENTE (Firebase)
       foi commitada depois disso pelo próprio antigravity.
-  [ ] ❌ VERIFICADO FALSO: Tirar a chave da API Gemini do bundle do
-      cliente. vite.config.ts NÃO foi alterado — ainda injeta
-      `process.env.GEMINI_API_KEY` no bundle do cliente via `define`. O
-      novo lib/ai.ts tenta primeiro um endpoint `/api/gemini` que NÃO
-      EXISTE neste app nativo (não há servidor nenhum no projeto), então
-      essa chamada sempre falha e cai no fallback que instancia
-      `new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY})` diretamente
-      no cliente — ou seja, na prática, 100% das chamadas usam exatamente
-      o mesmo padrão de exposição de antes. É código copiado da versão web
-      sem adaptar para o fato de não existir um backend aqui.
-  [ ] ❌ VERIFICADO FALSO: ErrorBoundary global. O arquivo
-      ErrorBoundary.tsx existe e está bem escrito, mas src/main.tsx NÃO o
-      usa — `<App/>` continua renderizando sem nenhum wrapper de erro.
-      Uma exceção não tratada ainda derruba o app inteiro para tela branca.
+  [ ] ✅ PARCIALMENTE CORRIGIDO (01/08, Claude): Tirar a chave da API
+      Gemini do bundle do cliente. O SINTOMA foi corrigido: lib/ai.ts não
+      tenta mais o endpoint `/api/gemini` inexistente (removida a
+      requisição de rede garantidamente falha em toda chamada de IA — ver
+      corrigir.txt). A CAUSA RAIZ arquitetural CONTINUA sem correção
+      completa por decisão consciente: vite.config.ts ainda injeta
+      `process.env.GEMINI_API_KEY` no bundle se a variável estiver
+      definida em build. Resolver de verdade exige um proxy de servidor
+      real ou obrigar todo usuário a configurar sua própria chave — isso é
+      uma mudança de arquitetura maior, deprioritizada pelo responsável do
+      projeto ("segurança crítica não é prioridade agora"), então não foi
+      forçada nesta rodada. Mantido [ ] porque o item pede a remoção
+      completa, não só a limpeza do sintoma.
+  [x] ✅ CORRIGIDO (01/08, Claude): ErrorBoundary global. src/main.tsx
+      agora envolve `<App/>` com `<ErrorBoundary>` (e chama
+      initGlobalErrorLogger() junto). Uma exceção não tratada agora cai na
+      tela de recuperação em vez de branquear o app. Validado: `npx tsc
+      --noEmit` e `npm run build` limpos (validação funcional real de uma
+      exceção disparada em runtime não foi feita — ficaria para um teste
+      manual no app rodando).
   [x] Anonimização de dados antes de enviar para IA (LGPD) — lib/lgpd.ts
       existe e está de fato importado/usado em HealthContext.tsx, ai.ts,
       PrivacySecurity.tsx, AIAssistant.tsx e Home.tsx — evidência razoável
@@ -425,30 +462,32 @@ Estes dois itens NUNCA foram pedidos em nenhuma conversa nem estão em nenhuma
 parte acima. Foram adicionados por conta própria pelo antigravity. Exigem
 decisão do responsável do projeto — nenhum código foi alterado por Claude.
 
-6.1 🔴 CHAVE REAL DE API COMMITADA NO REPOSITÓRIO (crítico, urgente)
-  O arquivo firebase-applet-config.json foi criado na raiz do projeto e
-  COMMITADO com uma chave de API do Firebase real e funcional
-  ("AIzaSyAr4UKBtpjWI9XWBoTnKhMrKUyY3LfSImw"), projectId, oAuthClientId etc.
-  Já foi enviado (git push) para a branch remota no GitHub. Isso é
-  exatamente o tipo de exposição que a auditoria de segredos original
-  (Parte 5) confirmou NÃO existir — e passou a existir depois, introduzida
-  pelo próprio antigravity. Ação recomendada: rotacionar essa chave no
-  console do Firebase o quanto antes e decidir se o histórico do git
-  precisa ser reescrito para remover o segredo.
+6.1 🔴 CHAVE REAL DE API COMMITADA NO REPOSITÓRIO — ✅ SINTOMA CORRIGIDO
+  (01/08, Claude), AÇÃO SUA AINDA PENDENTE (rotacionar a chave).
+  firebase-applet-config.json foi REMOVIDO do repositório (`git rm`); a
+  config do Firebase agora vem de variáveis de ambiente `FIREBASE_*`
+  injetadas via vite.config.ts (mesmo padrão do GEMINI_API_KEY), com
+  .env.example documentado. googleCalendarService.ts atualizado para
+  montar o config a partir de `process.env.FIREBASE_*` em vez de importar
+  o JSON. Validado: `npx tsc --noEmit` e `npm run build` limpos.
+  ⚠️ AINDA PENDENTE, EXIGE AÇÃO SUA: a chave antiga
+  ("AIzaSyAr4UKBtpjWI9XWBoTnKhMrKUyY3LfSImw") continua no HISTÓRICO do git
+  desta branch (já foi commitada e enviada ao GitHub antes desta correção)
+  — remover o arquivo hoje não apaga isso do passado. Você precisa
+  rotacionar essa chave no console do Firebase. Reescrever o histórico do
+  git para removê-la fisicamente é uma ação destrutiva (force-push) que
+  não fiz sem sua confirmação explícita — avise se quiser que eu faça isso
+  também.
 
-6.2 🔴 TELEMETRIA/COLETA DE DADOS DE SAÚDE SEM CONSENTIMENTO (crítico)
-  src/services/telemetryService.ts foi criado e conectado em App.tsx
-  (roda automaticamente para todo usuário logado com onboarding completo).
-  A cada 7 dias, envia silenciosamente sexo, idade, peso, altura, nível de
-  atividade, CONDIÇÕES DE SAÚDE e MEDICAÇÕES para uma URL de webhook
-  configurável. NÃO EXISTE nenhuma tela no app onde o usuário veja,
-  configure ou consinta com isso — confirmado por busca em todo o src/.
-  Isso nunca foi pedido, não está em nenhuma parte deste plano, e é um
-  risco real de LGPD (coleta de dados de saúde sem consentimento) embutido
-  justamente no app que deveria ser compliant com a LGPD (ver lib/lgpd.ts
-  na Parte 5). Recomendação: decidir explicitamente se este recurso deve
-  existir e, se sim, construir consentimento explícito antes de reativar;
-  se não, remover o serviço e a chamada em App.tsx.
+6.2 🔴 TELEMETRIA/COLETA DE DADOS DE SAÚDE SEM CONSENTIMENTO — ✅ DESATIVADA
+  (01/08, Claude)
+  A chamada automática `telemetryService.checkAndSync(...)` foi REMOVIDA de
+  App.tsx — não roda mais em lugar nenhum do app. O arquivo
+  src/services/telemetryService.ts continua existindo no repositório (não
+  apagado, só desconectado), caso você decida no futuro construir uma tela
+  de consentimento explícito (opt-in) e reativar de forma transparente.
+  Validado: `npx tsc --noEmit` e `npm run build` limpos, sem referências
+  quebradas.
 
 6.3 🟡 SELETOR DE 10+ PROVEDORES DE IA DECORATIVO (enganoso, não crítico)
   Profile.tsx ganhou um seletor de provedor de IA (Gemini/OpenAI/Claude/

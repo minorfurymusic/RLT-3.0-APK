@@ -1,7 +1,22 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
 import { CalendarEvent } from '../types';
+
+// Firebase config comes from build-time env vars (see .env.example), never
+// committed literally to the repo. Set these in .env.local for local dev.
+const firebaseConfig = {
+  apiKey: process.env.FIREBASE_API_KEY || '',
+  projectId: process.env.FIREBASE_PROJECT_ID || '',
+  appId: process.env.FIREBASE_APP_ID || '',
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '',
+};
+
+const isFirebaseConfigured = !!firebaseConfig.apiKey;
+if (!isFirebaseConfigured) {
+  console.warn('[googleCalendarService] Firebase não configurado (variáveis FIREBASE_* ausentes) — login com Google/sincronização de calendário ficará indisponível até configurar .env.local.');
+}
 
 // Initialize Firebase only if it hasn't been initialized already
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();

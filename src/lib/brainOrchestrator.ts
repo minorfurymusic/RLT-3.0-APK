@@ -149,6 +149,28 @@ function normalizeText(text: string): string {
     .trim();
 }
 
+// Compartilhado entre a classificacao de dominio (segmentIntentionClauses) e
+// a extracao de objetivo (parseAndValidateDomain) - fonte unica de verdade
+// para as frases que indicam mudanca de objetivo do perfil.
+const GOAL_MAPPINGS: Record<string, string> = {
+  'emagrecimento': 'Weight Loss',
+  'perder peso': 'Weight Loss',
+  'perda de peso': 'Weight Loss',
+  'emagrecer': 'Weight Loss',
+  'ganho de massa': 'Muscle Gain',
+  'ganhar massa': 'Muscle Gain',
+  'hipertrofia': 'Muscle Gain',
+  'ganho muscular': 'Muscle Gain',
+  'manutencao': 'Maintenance',
+  'manter peso': 'Maintenance',
+  'saude': 'Health',
+  'qualidade de vida': 'Health',
+  'bem-estar': 'Health',
+  'fit': 'Health',
+  'ativo': 'Health'
+};
+const GOAL_KEYWORDS = Object.keys(GOAL_MAPPINGS);
+
 /**
  * Capitaliza a primeira letra alfabética de um texto, ignorando dígitos ou
  * símbolos que possam aparecer antes dela (ex: "2 ovos" -> "2 Ovos").
@@ -239,6 +261,74 @@ export function parseDateTimeFromText(text: string): { isoDate: string; timeStr:
 }
 
 /**
+ * Detecta o domínio de um trecho de texto já normalizado (sem acentos,
+ * minúsculo). Extraída como função própria para poder ser reaproveitada
+ * tanto na segmentação principal quanto na divisão por conjunção "e"
+ * abaixo — uma frase só é dividida em duas se AMBOS os lados detectarem
+ * um domínio real de forma independente, evitando falsos positivos em usos
+ * comuns de "e" que não separam duas ações (ex.: "arroz e feijão" continua
+ * uma coisa só, pois cai inteiro em MEALS de qualquer forma).
+ */
+function detectDomain(cNorm: string): DomainType {
+  if (cNorm.includes('agua') || cNorm.includes('água') || cNorm.includes('500ml') || cNorm.includes('1l') || cNorm.includes('hidratacao')) {
+    return 'WATER';
+  }
+  if (/\b(comi|almocei|jantei|lanchei|whey|ovo|ovos|frango|arroz|refeicao|refeição|refeicoes|refeições|suplemento)\b/.test(cNorm)) {
+    return 'MEALS';
+  }
+  if (/\b(supino|agachamento|dumbbell|treinei|treino|exercicio|exercício|caminhada|corri|caminhei|corrida|peito|costas|perna|pernas|biceps|triceps|ombro|ombros)\b/.test(cNorm)) {
+    return 'GYM';
+  }
+  if (/\b(exame|exames|testosterona|hemograma|glicemia|vitamina d|colesterol|ultrassom|ressonancia|raio x|laboratorio)\b/.test(cNorm)) {
+    return 'EXAMS';
+  }
+  if (/\b(consulta|consultas|agendei|marquei|marque|agendamento|dermatologista|pediatra|cardiologista|medico|médico|desmarque)\b/.test(cNorm)) {
+    return 'AGENDA';
+  }
+  if (/\b(medicamento|remedio|remédio|vitamina|dipirona|amoxicilina|creatina|tomando|tomei)\b/.test(cNorm) && !cNorm.includes('exame de vitamina')) {
+    return 'MEDS';
+  }
+  if (/\b(peso|altura|idade)\b/.test(cNorm) && (cNorm.includes('meu') || cNorm.includes('minha') || cNorm.includes('corrija') || cNorm.includes('kg') || cNorm.includes('cm'))) {
+    return 'PROFILE';
+  }
+  if (/\b(objetivo|meta)\b/.test(cNorm) && GOAL_KEYWORDS.some(k => cNorm.includes(k))) {
+    // "meu objetivo agora é emagrecimento" — mudança de objetivo sem menção a peso/altura/idade
+    return 'PROFILE';
+  }
+  if (cNorm.includes('trocar tema') || cNorm.includes('mudar tema') || cNorm.includes('modo escuro') || cNorm.includes('modo claro')) {
+    return 'THEME';
+  }
+  return 'QUERY';
+}
+
+/**
+ * Divide um trecho pela conjunção " e " quando os dois lados resultantes
+ * detectam domínios reais e diferentes de forma independente — cobre o
+ * caso "bebi 200ml de água e fiz supino com 40kg" (2 ações na mesma
+ * frase), que antes nunca era separado (só se dividia por linha, ";" ou
+ * ponto final).
+ */
+function splitByConjunction(text: string): string[] {
+  const conjRegex = /\s+e\s+/i;
+  const match = text.match(conjRegex);
+  if (!match || match.index === undefined) return [text];
+
+  const left = text.slice(0, match.index).trim();
+  const right = text.slice(match.index + match[0].length).trim();
+  if (!left || !right) return [text];
+
+  const leftDomain = detectDomain(normalizeText(left));
+  const rightDomain = detectDomain(normalizeText(right));
+
+  if (leftDomain !== 'QUERY' && rightDomain !== 'QUERY' && leftDomain !== rightDomain) {
+    // Cada lado vira uma frase independente; aplica recursivamente para
+    // cobrir 3+ ações na mesma mensagem ("bebi água e comi ovo e fiz supino").
+    return [...splitByConjunction(left), ...splitByConjunction(right)];
+  }
+  return [text];
+}
+
+/**
  * FASE 1 — TOKENIZAÇÃO & SEGMENTAÇÃO DE INTENÇÕES
  * Breaks multi-intent statements into domain-grouped intention clauses.
  */
@@ -247,7 +337,8 @@ export function segmentIntentionClauses(rawQuery: string): IntentionSegment[] {
   const rawParts = rawQuery
     .split(/\n+|\s*;\s*|(?<=\.)\s+/)
     .map(p => p.replace(/^[•\-\*\d\.\s]+/, '').trim())
-    .filter(p => p.length > 0);
+    .filter(p => p.length > 0)
+    .flatMap(splitByConjunction);
 
   const segments: IntentionSegment[] = [];
 
@@ -263,25 +354,7 @@ export function segmentIntentionClauses(rawQuery: string): IntentionSegment[] {
     const isZero = /zere|zerar/.test(cNorm);
     const isCorrection = /corrig|alter|mudar|mude|defin|set/.test(cNorm);
 
-    let domain: DomainType = 'QUERY';
-
-    if (cNorm.includes('agua') || cNorm.includes('água') || cNorm.includes('500ml') || cNorm.includes('1l') || cNorm.includes('hidratacao')) {
-      domain = 'WATER';
-    } else if (/\b(comi|almocei|jantei|lanchei|whey|ovo|ovos|frango|arroz|refeicao|refeição|refeicoes|refeições|suplemento)\b/.test(cNorm)) {
-      domain = 'MEALS';
-    } else if (/\b(supino|agachamento|dumbbell|treinei|treino|exercicio|exercício|caminhada|corri|caminhei|corrida|peito|costas|perna|pernas|biceps|triceps|ombro|ombros)\b/.test(cNorm)) {
-      domain = 'GYM';
-    } else if (/\b(exame|exames|testosterona|hemograma|glicemia|vitamina d|colesterol|ultrassom|ressonancia|raio x|laboratorio)\b/.test(cNorm)) {
-      domain = 'EXAMS';
-    } else if (/\b(consulta|consultas|agendei|marquei|marque|agendamento|dermatologista|pediatra|cardiologista|medico|médico|desmarque)\b/.test(cNorm)) {
-      domain = 'AGENDA';
-    } else if (/\b(medicamento|remedio|remédio|vitamina|dipirona|amoxicilina|creatina|tomando|tomei)\b/.test(cNorm) && !cNorm.includes('exame de vitamina')) {
-      domain = 'MEDS';
-    } else if (/\b(peso|altura|idade)\b/.test(cNorm) && (cNorm.includes('meu') || cNorm.includes('minha') || cNorm.includes('corrija') || cNorm.includes('kg') || cNorm.includes('cm'))) {
-      domain = 'PROFILE';
-    } else if (cNorm.includes('trocar tema') || cNorm.includes('mudar tema') || cNorm.includes('modo escuro') || cNorm.includes('modo claro')) {
-      domain = 'THEME';
-    }
+    const domain: DomainType = detectDomain(cNorm);
 
     // If part starts with "Resultado...", "Data...", "Unidade...", merge into preceding segment if available
     const isContinuation = /^(resultado|data|unidade|val|valor|status|obs|observacao)\b/i.test(part);
@@ -421,7 +494,10 @@ export function parseAndValidateDomain(segment: IntentionSegment): DomainParsedP
     let cleanName = rawText
       .replace(/^(?:registre|adicionar|cadastre|adicione|treinei|fiz|remova|cancele|retire)\s+/i, '')
       .replace(/\b\d+(?:\.\d+)?\s*(?:kg|reps|repetico|repeticoes|repetição|repetições|series|sets|série|séries)\b/gi, '')
-      .replace(/(?:com|da|de|do|em|no|na|por|para|ate|até)\s+\w+/gi, '')
+      // \b nos dois lados é obrigatório: sem isso, "no" casa dentro de
+      // "supiNO" (letras internas da palavra, não a preposição "no"), e o
+      // resto do regex ("\s+\w+") apaga o que vem depois, sobrando "Supi".
+      .replace(/\b(?:com|da|de|do|em|no|na|por|para|ate|até)\b\s+\w+/gi, '')
       .replace(/\d+(?:\.\d+)?\s*$/, '')
       .replace(/kg\s*$/i, '')
       .replace(/\s+/g, ' ')
@@ -691,7 +767,12 @@ export function parseAndValidateDomain(segment: IntentionSegment): DomainParsedP
     medName = medName.replace(/\d+\s*(?:mg|g|ml|ui|comprimido|comprimidos|dose)s?\s*/gi, '').trim();
     // Remove date info from name
     medName = medName.replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g, '').replace(/dia\s+\d{1,2}\s+de\s+[a-zA-ZÀ-ÿ]+/gi, '').trim();
-    
+    // Remove leftover connector phrases that precede a date/period, que
+    // sobram depois da data ser removida acima (ex.: "Losartana a partir
+    // de" em vez de só "Losartana") — bug confirmado com o exemplo
+    // "Tomando Losartana 50mg a partir de 15/07".
+    medName = medName.replace(/\s*(?:a\s*partir\s*de|desde|come[cç]ou\s*(?:em)?|iniciando\s*em|iniciei\s*em)\s*$/i, '').trim();
+
     if (!medName || medName.length < 2) medName = 'Medicamento';
 
     // Extract start date if specified
@@ -807,11 +888,14 @@ export function classifyAndExecuteQuery(
         if (ctx.deleteWaterLog && todayWaterLogs.length > 0) {
           todayWaterLogs.forEach(w => ctx.deleteWaterLog!(w.id));
         }
-        // Read-back verification
-        const readBackTotal = ctx.waterLogs.filter(w => new Date(w.date).toDateString() === todayStr).reduce((s, w) => s + w.amount, 0);
+        // NÃO reler ctx.waterLogs aqui: é o array de ANTES da mutação (o
+        // setState do React que deleteWaterLog dispara é assíncrono, então
+        // o contexto ainda não foi atualizado neste mesmo ciclo síncrono).
+        // Reler produzia sempre o total de antes de zerar. Como acabamos de
+        // apagar todos os registros de hoje, o total pós-ação é sempre 0.
         isMutation = true;
         actionsTaken.push('zeroWater');
-        logMessages.push(`💧 **Água:** ✔ Consumo de hoje zerado na Base Central (Total: ${readBackTotal} ml)`);
+        logMessages.push(`💧 **Água:** ✔ Consumo de hoje zerado na Base Central (Total: 0 ml)`);
       } else if (plan.action === 'REMOVE') {
         const todayWaterLogs = ctx.waterLogs.filter(w => new Date(w.date).toDateString() === todayStr);
         if (todayWaterLogs.length > 0 && ctx.deleteWaterLog) {

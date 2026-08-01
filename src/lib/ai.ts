@@ -4,6 +4,21 @@ import { redactImagePII } from "./lgpd";
 import { logError } from "./logger";
 import { safeLocalStorage } from "./utils";
 
+// Este é um app NATIVO (Capacitor/Android) — não existe (nem deve existir)
+// um servidor rodando junto com o APK instalado no celular do usuário. Uma
+// versão anterior deste arquivo tentava primeiro um proxy de servidor
+// ('/api/gemini', que só existe na versão web de referência) antes de cair
+// no SDK direto — isso significava que TODA chamada de IA gastava uma
+// requisição de rede garantidamente falha antes de funcionar. Removido:
+// vai direto para o SDK client-side, que é a única opção real aqui.
+//
+// NOTA DE SEGURANÇA (ver processo.txt Parte 5, deprioritizado por decisão
+// do responsável do projeto): usar `process.env.GEMINI_API_KEY` como
+// fallback ainda significa que, se uma chave real for definida no ambiente
+// de build, ela fica embutida no bundle e é extraível do APK. Isso não foi
+// alterado aqui — só a chamada de rede inútil foi removida. A correção
+// completa (proxy de servidor de verdade ou exigir chave do usuário) segue
+// pendente e está fora do escopo desta rodada de correções.
 export function getGoogleGenAI(): any {
   return {
     models: {
@@ -16,65 +31,30 @@ export function getGoogleGenAI(): any {
           }
         }
 
-        try {
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-          };
-          if (localKey) {
-            headers['x-gemini-api-key'] = localKey;
-          }
+        const envKey = process.env.GEMINI_API_KEY?.trim();
+        const activeKey = localKey || (envKey && !envKey.startsWith("YOUR_") ? envKey : "");
 
-          const response = await fetch('/api/gemini', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(params),
-          });
-
-          const data = await response.json();
-
-          if (!response.ok) {
-            const errorMsg = data.message || `Erro ao chamar a API Gemini (${response.status})`;
-            logError({
-              type: 'ai',
-              module: 'Gemini Proxy /api/gemini',
-              message: errorMsg,
-              metadata: { status: response.status, model: params?.model },
-            });
-            throw new Error(errorMsg);
-          }
-
-          return {
-            text: data.text || "",
-            candidates: data.candidates || [],
-            usageMetadata: data.usageMetadata || null,
-          };
-        } catch (fetchErr: any) {
-          console.warn("Backend proxy /api/gemini error, attempting direct client SDK fallback...", fetchErr);
-          
-          const envKey = process.env.GEMINI_API_KEY?.trim();
-          const activeKey = localKey || (envKey && !envKey.startsWith("YOUR_") ? envKey : "");
-          if (activeKey) {
-            try {
-              const directAi = new GoogleGenAI({ apiKey: activeKey });
-              return await directAi.models.generateContent(params as any);
-            } catch (directErr: any) {
-              logError({
-                type: 'ai',
-                module: 'Gemini Client SDK Fallback',
-                message: directErr.message || 'Error executing direct Gemini call',
-                stack: directErr.stack,
-              });
-              throw directErr;
-            }
-          }
-
+        if (!activeKey) {
+          const noKeyErr = new Error('Nenhuma chave de API do Gemini configurada. Configure a sua em Perfil > Configuração de IA.');
           logError({
             type: 'ai',
             module: 'Gemini AI Engine',
-            message: fetchErr.message || 'Failed to generate content with Gemini',
-            stack: fetchErr.stack,
+            message: noKeyErr.message,
           });
-          throw fetchErr;
+          throw noKeyErr;
+        }
+
+        try {
+          const directAi = new GoogleGenAI({ apiKey: activeKey });
+          return await directAi.models.generateContent(params as any);
+        } catch (directErr: any) {
+          logError({
+            type: 'ai',
+            module: 'Gemini Client SDK',
+            message: directErr.message || 'Error executing direct Gemini call',
+            stack: directErr.stack,
+          });
+          throw directErr;
         }
       }
     }
