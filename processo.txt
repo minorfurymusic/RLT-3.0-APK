@@ -272,90 +272,90 @@ Itens do diagnostico.txt não cobertos nas partes acima. Adaptar cada um para
 arquitetura nativa (não copiar padrões específicos de navegador/PWA).
 
 4.1 Telas inteiras ausentes
-  [ ] PerformanceDashboard — painel "Bio-Status" com gráfico radar
+  [x] PerformanceDashboard — painel "Bio-Status" com gráfico radar
       (força/nutrição/vitalidade/foco/condicionamento), navegação por
       data, diagnóstico gerado por IA, exportação de imagem (usar
       biblioteca de gráficos tipo recharts + captura de tela nativa em
       vez de html2canvas, que é de navegador)
-  [ ] ShareModal — exportar/compartilhar cards de progresso como imagem,
+  [x] ShareModal — exportar/compartilhar cards de progresso como imagem,
       usando compartilhamento nativo do Android (Share Sheet) em vez de
       navigator.share (web)
-  [ ] DiagnosticModal — painel de diagnóstico embutido (versão do build,
+  [x] DiagnosticModal — painel de diagnóstico embutido (versão do build,
       status de sincronização, "forçar limpeza e recarregar")
-  [ ] PrivacySecurity — tela de privacidade: exportar dados do usuário,
+  [x] PrivacySecurity — tela de privacidade: exportar dados do usuário,
       limpar cache de mídia, visualizar/exportar/limpar logs de erro
-  [ ] LanguageRegional — seletor de idioma (usar o sistema de i18n da
+  [x] LanguageRegional — seletor de idioma (usar o sistema de i18n da
       Parte 3.2)
-  [ ] HelpSupport — central de ajuda com busca por IA (usa o Cérebro da
+  [x] HelpSupport — central de ajuda com busca por IA (usa o Cérebro da
       Parte 1) e tutoriais guiados
-  [ ] RltLogo — componente de marca reutilizável com fallback (hoje cai
+  [x] RltLogo — componente de marca reutilizável com fallback (hoje cai
       para emoji genérico)
-  [ ] Modal — primitivo de modal compartilhado (hoje Profile.tsx duplica
+  [x] Modal — primitivo de modal compartilhado (hoje Profile.tsx duplica
       um modal local próprio; consolidar antes de portar as telas acima
       que dependem de um modal compartilhado)
 
 4.2 Medical.tsx / HistoryForm.tsx
-  [ ] Adicionar categoria "Medicação Contínua" (prescrição, validade,
+  [x] Adicionar categoria "Medicação Contínua" (prescrição, validade,
       dosagem, agenda de horários de dose repetíveis, insights de IA
       sobre a medicação)
-  [ ] Adicionar categoria "Sinais Vitais de Rotina" (pressão arterial,
+  [x] Adicionar categoria "Sinais Vitais de Rotina" (pressão arterial,
       glicemia com estado jejum/pré/pós-prandial, métrica livre "outro")
-  [ ] Atualizar types.ts com os tipos correspondentes
+  [x] Atualizar types.ts com os tipos correspondentes
       (ContinuousMedicationRecord, RoutineVitalsRecord, etc.) — hoje o
       modelo de dados não suporta essas categorias, não é só UI faltando
-  [ ] Gráficos de tendência de sinais vitais ao longo do tempo
-  [ ] Compressão de imagem antes de anexar documento/exame (reusar 1.3)
-  [ ] Ampliar tipos de arquivo aceitos no upload (hoje mais restrito que
+  [x] Gráficos de tendência de sinais vitais ao longo do tempo
+  [x] Compressão de imagem antes de anexar documento/exame (reusar 1.3)
+  [x] Ampliar tipos de arquivo aceitos no upload (hoje mais restrito que
       a versão web)
 
 4.3 Exercises.tsx
-  [ ] Aba dedicada de Biblioteca de Exercícios com busca e filtro por
+  [x] Aba dedicada de Biblioteca de Exercícios com busca e filtro por
       grupo muscular
-  [ ] Edição de logs de treino já registrados (hoje só permite adicionar,
+  [x] Edição de logs de treino já registrados (hoje só permite adicionar,
       não editar)
-  [ ] Link para o Performance Dashboard (item 4.1)
+  [x] Link para o Performance Dashboard (item 4.1)
 
 4.4 Nutrition.tsx
-  [ ] Entrada manual de código de barras como apoio à análise por IA
-  [ ] Upload/análise de múltiplas imagens (não só uma foto por vez)
-  [ ] Etapa de revisão/edição do resultado da IA antes de salvar (hoje
+  [x] Entrada manual de código de barras como apoio à análise por IA
+  [x] Upload/análise de múltiplas imagens (não só uma foto por vez)
+  [x] Etapa de revisão/edição do resultado da IA antes de salvar (hoje
       salva direto o que a IA retornar, sem o usuário conferir/corrigir)
 
 4.5 WaterTracking.tsx
-  [ ] Corrigir bug confirmado: novo registro de água sempre grava contra
+  [x] Corrigir bug confirmado: novo registro de água sempre grava contra
       `new Date()` (hoje), ignorando a data selecionada globalmente —
       deve usar a data selecionada do contexto, igual as outras telas
 
 4.6 Calendar.tsx
-  [ ] Remover ou implementar de fato o aviso "este evento será
+  [x] Remover ou implementar de fato o aviso "este evento será
       sincronizado com Google e Apple Calendar" — hoje é uma promessa
       falsa na interface, não existe sincronização nenhuma
-  [ ] Se for implementar sincronização real de agenda, usar Google
+  [x] Se for implementar sincronização real de agenda, usar Google
       Calendar API com OAuth nativo (Google Sign-In no Android) — MAS
       isso é DIFERENTE de Health Connect (Parte 2) e de menor prioridade;
       não misturar os dois escopos
 
 4.7 Profile.tsx
-  [ ] Corrigir os 3 botões sem onClick (Privacidade & Segurança / Idioma /
+  [x] Corrigir os 3 botões sem onClick (Privacidade & Segurança / Idioma /
       Ajuda & Suporte) e o botão de Sair sem onClick — ligar às telas da
       Parte 4.1 e às rotas correspondentes em App.tsx (hoje as rotas nem
       existem)
-  [ ] Alternância de tema claro/escuro
-  [ ] Alternância de unidades métrico/imperial
-  [ ] Entrada de configuração de chave de API pelo próprio usuário (isso
+  [x] Alternância de tema claro/escuro
+  [x] Alternância de unidades métrico/imperial
+  [x] Entrada de configuração de chave de API pelo próprio usuário (isso
       também ajuda a Parte 5, sem precisar abrir frente de segurança
       separada — é natural implementar aqui)
-  [ ] Exportação de dados do usuário
+  [x] Exportação de dados do usuário
 
 4.8 Notifications.tsx
-  [ ] Botão "Limpar Tudo" (clearAllNotifications ausente também no
+  [x] Botão "Limpar Tudo" (clearAllNotifications ausente também no
       context)
 
 4.9 Onboarding.tsx
-  [ ] Adicionar campo de nome (ausente hoje)
-  [ ] Validar idade/peso/altura antes de avançar (hoje aceita
+  [x] Adicionar campo de nome (ausente hoje)
+  [x] Validar idade/peso/altura antes de avançar (hoje aceita
       zero/valores inválidos)
-  [ ] Persistir corretamente a flag de onboarding concluído
+  [x] Persistir corretamente a flag de onboarding concluído
 
 --------------------------------------------------------------------------------
 PARTE 5 — SEGURANÇA (BAIXA PRIORIDADE / OPORTUNISTA) — não abrir frente própria
@@ -364,7 +364,7 @@ Fazer somente quando o mesmo arquivo já estiver sendo tocado por outro item
 acima. Não gastar um ciclo de trabalho dedicado só a isto agora, por decisão
 do responsável do projeto.
 
-  [ ] Login real (substituir stub admin/123456 hardcoded) — ligado à Parte
+  [x] Login real (substituir stub admin/123456 hardcoded) — ligado à Parte
       2 se usar Google Sign-In para Health Connect/Calendar, aproveitar a
       mesma implementação de auth
   [x] Verificado (01/08/2026, por Claude): NÃO existe chave de API literal
@@ -379,16 +379,16 @@ do responsável do projeto.
       chave real no disco) e, se encontrar algo, remover e trocar a chave
       imediatamente (chave pode já estar comprometida se algum build local
       com ela foi gerado).
-  [ ] Tirar a chave da API Gemini do bundle do cliente (a causa raiz acima,
+  [x] Tirar a chave da API Gemini do bundle do cliente (a causa raiz acima,
       não apenas o sintoma) — resolver naturalmente junto com 4.7
       (configuração de chave pelo usuário) e com a Parte 1 (reconstrução do
       Cérebro já mexe em todos os pontos que instanciam o cliente Gemini)
-  [ ] ErrorBoundary global — priorizar mesmo assim, porque impacta
+  [x] ErrorBoundary global — priorizar mesmo assim, porque impacta
       diretamente a confiabilidade do Cérebro (Parte 1): sem isso, uma
       resposta malformada da IA derruba o app inteiro com tela branca.
       Tratar como parte da entrega da Parte 1, não como item de segurança
       isolado
-  [ ] Anonimização de dados antes de enviar para IA (LGPD) — avaliar só
+  [x] Anonimização de dados antes de enviar para IA (LGPD) — avaliar só
       se sobrar tempo; não bloqueia nenhuma funcionalidade
 
 ================================================================================
