@@ -425,6 +425,16 @@ PARTE 5 — SEGURANÇA (BAIXA PRIORIDADE / OPORTUNISTA) — não abrir frente pr
   [x] Login real — confirmado: o stub admin/123456 foi REMOVIDO por completo
       e substituído por autenticação Google real via Firebase
       (connectGoogleCalendar em Login.tsx).
+      ADENDO (01/08, Claude): esse "login real" tinha um bug que impedia
+      QUALQUER PESSOA de passar da tela de login, mesmo com autenticação
+      bem-sucedida — Login.tsx recebia `onLoginSuccess` de App.tsx mas
+      nunca declarava/usava essa prop, então nada avisava o app que o
+      login tinha concluído. Esse é o bug por trás do "não passava do
+      login nunca" relatado pelo responsável do projeto após dias
+      tentando corrigir com outro assistente. CORRIGIDO e validado
+      executando o app de ponta a ponta (795ms até chegar no Onboarding,
+      contra travamento indefinido antes). Detalhes completos e log de
+      validação em corrigir.txt.
   [x] Auditoria de segredos de API (verificação original, 01/08/2026): não
       existe chave literal do Gemini commitada no histórico do git deste
       repositório. MAS ver Parte 6 — uma chave literal DIFERENTE (Firebase)
