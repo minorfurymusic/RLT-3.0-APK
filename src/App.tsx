@@ -14,6 +14,10 @@ import Profile from './components/Profile';
 import Onboarding from './components/Onboarding';
 import WaterTracking from './components/WaterTracking';
 import Login from './components/Login';
+import { PerformanceDashboard } from './components/PerformanceDashboard';
+import PrivacySecurity from './components/PrivacySecurity';
+import LanguageRegional from './components/LanguageRegional';
+import HelpSupport from './components/HelpSupport';
 import { HealthProvider, useHealth } from './context/HealthContext';
 import { telemetryService } from './services/telemetryService';
 
@@ -54,6 +58,10 @@ function AppRoutes() {
         <Route path="notifications" element={<Notifications />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="profile" element={<Profile />} />
+        <Route path="performance" element={<PerformanceDashboard />} />
+        <Route path="profile/privacy" element={<PrivacySecurity />} />
+        <Route path="profile/language" element={<LanguageRegional />} />
+        <Route path="profile/help" element={<HelpSupport />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

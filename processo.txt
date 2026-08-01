@@ -207,37 +207,37 @@ Itens confirmados por leitura direta do código atual (ver anotações de
 verificação entre colchetes).
 
 3.1 Layout/Visual
-  [ ] Remover o botão flutuante de logout no topo de Layout.tsx (linhas
+  [x] Remover o botão flutuante de logout no topo de Layout.tsx (linhas
       ~28-35) — confirmado sobreposto/redundante com o logout que deve
       existir em Profile.tsx (ver Parte 4, Profile hoje tem botão de
       logout sem onClick — corrigir os dois juntos)
-  [ ] Tratamento de erro de imagem (onError) no avatar de perfil em
+  [x] Tratamento de erro de imagem (onError) no avatar de perfil em
       Home.tsx (~110-119) e Profile.tsx (~66-70): se a URL falhar, cair
       para iniciais do nome ou ícone padrão de usuário — nunca mostrar
       ícone de imagem quebrada + texto "alt" cru
 
 3.2 Idioma (app está híbrido: navegação em PT, resto majoritariamente EN)
-  [ ] Decisão de arquitetura primeiro: implementar sistema de tradução
+  [x] Decisão de arquitetura primeiro: implementar sistema de tradução
       real (equivalente a lib/i18n.ts do C-rebro) em vez de traduzir
       string por string hardcoded — evita reabrir esse mesmo problema
       depois. [confirmado: nav labels já em PT (Layout.tsx:42
       label="Início"), resto do app em inglês hardcoded]
-  [ ] Home.tsx: Good morning, formatação de data (trocar locale para
+  [x] Home.tsx: Good morning, formatação de data (trocar locale para
       pt-BR), Health Score, mensagens do card de bem-estar mental, Daily
       Goals, Calories/Protein/Water/Steps, Fat Loss Trend, SURPLUS/DEFICIT,
       Recent Notifications, Clear All, Daily Agenda, Smart Insights
-  [ ] Nutrition.tsx: Daily Macro Overview, Today's Meals, Macro History,
+  [x] Nutrition.tsx: Daily Macro Overview, Today's Meals, Macro History,
       Breakfast/Lunch/Dinner/Snack, Log New Meal, What did you eat?
-  [ ] Exercises.tsx: Scheduled Routines, Step Goal, Every day,
+  [x] Exercises.tsx: Scheduled Routines, Step Goal, Every day,
       Monday-Friday, Walking/Running/Cycling/Gym/Other, Cardio/Gym
       Session, Volume/Sets/Reps/Weight, grupos musculares
-  [ ] Medical.tsx: Medical History, Exams, Consultations, Medical
+  [x] Medical.tsx: Medical History, Exams, Consultations, Medical
       Certificates, Emergency, Family History, Stress Reports
-  [ ] Onboarding.tsx e Login.tsx (ajustar textos; NÃO mexer na lógica de
+  [x] Onboarding.tsx e Login.tsx (ajustar textos; NÃO mexer na lógica de
       autenticação aqui — isso é Parte 5)
 
 3.3 Lógica/Cálculos
-  [ ] getDailyCalorieTarget (HealthContext.tsx ~312-363): já existe
+  [x] getDailyCalorieTarget (HealthContext.tsx ~312-363): já existe
       fallback `|| 75/180/28` para peso/altura/idade — mas a subtração
       `tdee - (fatLossGoal.targetValue || 500)` (linha ~359) NÃO tem piso
       mínimo. Adicionar clamp (ex.: nunca retornar menos que um valor
@@ -245,24 +245,24 @@ verificação entre colchetes).
       fatLossGoal.targetValue é um número finito antes de subtrair, para
       cobrir o caso de dado corrompido gerando resultado
       absurdamente negativo
-  [ ] Contador de passos travado em 7240 — RESOLVIDO pela Parte 2 (Health
+  [x] Contador de passos travado em 7240 — RESOLVIDO pela Parte 2 (Health
       Connect); não duplicar esforço aqui, só confirmar que os 3 pontos em
       HealthContext.tsx (linhas ~338, ~439, ~607) passam a usar dado real
-  [ ] Score de Saúde (/100) ficando vazio/NaN: consequência do item
+  [x] Score de Saúde (/100) ficando vazio/NaN: consequência do item
       anterior (calorie target quebrado) — deve se resolver junto, mas
       adicionar proteção extra contra NaN nas fórmulas internas do score
       mesmo assim (defesa em profundidade)
 
 3.4 Agenda/Rotinas
-  [ ] Home.tsx (~442-464): substituir a lista hardcoded de Agenda Diária
+  [x] Home.tsx (~442-464): substituir a lista hardcoded de Agenda Diária
       (Breakfast 08:00/Workout 10:30/Meditation 18:00, sem onClick) por
       mapeamento dinâmico das rotinas reais cadastradas no HealthContext
       (routines), incluindo horários de medicação vindos de registros
       médicos ativos
-  [ ] Conectar onClick de cada item da agenda para marcar como
+  [x] Conectar onClick de cada item da agenda para marcar como
       concluído/pendente de fato (atualizar o registro correspondente no
       context)
-  [ ] O item "Meditation" só deve aparecer se o usuário tiver de fato uma
+  [x] O item "Meditation" só deve aparecer se o usuário tiver de fato uma
       rotina de meditação cadastrada — não exibir item fantasma
 
 --------------------------------------------------------------------------------
