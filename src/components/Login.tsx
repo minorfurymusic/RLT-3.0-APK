@@ -4,7 +4,18 @@ import { useHealth } from '../context/HealthContext';
 import { Shield, AlertCircle, Sparkles, ArrowLeft, Heart, Zap, Lock, CheckCircle2 } from './Icons';
 import RltLogo from './RltLogo';
 
-export default function Login() {
+interface LoginProps {
+  onLoginSuccess: () => void;
+}
+
+// BUG CRÍTICO CORRIGIDO (01/08, Claude): este componente recebia
+// `onLoginSuccess` de App.tsx mas nunca declarava/usava essa prop — mesmo
+// com o Google Sign-In funcionando 100% (ou caindo no fallback de usuário
+// mock que já existe em connectGoogleCalendar quando o Firebase não está
+// configurado), nada aqui avisava o App.tsx que o login tinha concluído.
+// Resultado: ninguém jamais passava da tela de login, com ou sem Firebase
+// configurado — era esse o "não passava do login nunca" relatado.
+export default function Login({ onLoginSuccess }: LoginProps) {
   const { appLanguage, connectGoogleCalendar } = useHealth();
   const [step, setStep] = useState<'welcome' | 'auth'>('welcome');
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +28,11 @@ export default function Login() {
     setLoading(true);
     try {
       await connectGoogleCalendar();
+      // connectGoogleCalendar nunca relança erro (tem fallback interno pra
+      // usuário mock) — se chegou aqui, considerar autenticado e liberar o
+      // app. Persistir a flag para sobreviver a um F5/reabertura do app.
+      localStorage.setItem('health_login', 'true');
+      onLoginSuccess();
     } catch (err: any) {
       console.error("Login failed:", err);
       setError(

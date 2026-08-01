@@ -179,4 +179,46 @@ portabilidade do app para paridade com o C-rebro e o Google Fit/Health Connect.
     Screenshots tirados confirmam: modal de permissões (com o card de
     Health Connect adicionado numa correção anterior), tela de boas-vindas
     RLT, e tela de "Entrar com o Google".
+
+[x] BUG CRÍTICO: NINGUÉM NUNCA PASSAVA DO LOGIN (01/08/2026, por Claude) —
+    ESTE É O BUG QUE O RESPONSÁVEL DO PROJETO DESCREVEU COMO "não passava
+    do login nunca" APÓS DIAS TENTANDO COM O OPENHANDS/ANTIGRAVITY
+  - Como foi encontrado: testando o clique real em "Entrar com o Google"
+    contra o app rodando de verdade.
+  - Causa raiz (duas, empilhadas):
+    1. src/components/Login.tsx recebia a prop `onLoginSuccess` de
+       App.tsx (`<Login onLoginSuccess={() => setIsLoggedIn(true)} />`)
+       mas a função do componente era `function Login()` — SEM NENHUM
+       PARÂMETRO. A prop era completamente ignorada. Mesmo com o Google
+       Sign-In funcionando 100% (ou caindo no fallback de usuário mock que
+       já existe em HealthContext.connectGoogleCalendar quando o
+       Firebase/rede falha), nada avisava o App.tsx que o login tinha
+       concluído — a flag `isLoggedIn` nunca virava `true`. Resultado:
+       tela de login para sempre, com ou sem credenciais corretas, com ou
+       sem Firebase configurado.
+    2. Mesmo depois de corrigir (1), o fallback de usuário mock ainda
+       tentava `syncAllToGoogleCalendar(mock-access-token)` — um fetch
+       real para a API do Google Calendar com um token falso, que
+       demorava ~13 segundos para falhar de vez (erro de rede) antes de
+       liberar o login. Na prática, parecia travado.
+  - Arquivos alterados: src/components/Login.tsx (aceita e chama
+    onLoginSuccess de verdade, persiste health_login=true no sucesso),
+    src/context/HealthContext.tsx (connectGoogleCalendar não tenta mais
+    sincronizar calendário quando está usando o usuário mock — só faz
+    sentido sincronizar com um token real).
+  - Como validado (execução real, não só leitura de código): rodei o app
+    de verdade (Vite dev + Chromium headless) e cliquei em "Entrar com o
+    Google" de ponta a ponta:
+      • ANTES da correção: preso na tela de login indefinidamente (testei
+        até 12+ segundos parado, sem nunca sair).
+      • DEPOIS da correção (1) mas antes da (2): saiu do login, mas levou
+        ~13 segundos (esperando o fetch de sincronização falhar).
+      • DEPOIS das duas correções: saiu do login em 795ms, chegou na
+        tela de Onboarding ("Informações Essenciais"), com
+        `localStorage.health_login === 'true'` confirmado.
+  - Isso resolve o problema relatado de "não passava do login nunca" —
+    tanto no ambiente de teste (sem Firebase configurado, cai no
+    fallback mock) quanto seria válido com Firebase configurado de
+    verdade (o Google Sign-In real também nunca chamava onLoginSuccess
+    antes desta correção).
 --------------------------------------------------------------------------------

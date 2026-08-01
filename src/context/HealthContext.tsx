@@ -1021,10 +1021,12 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsSyncing(true);
       let result = null;
+      let isMockUser = false;
       try {
         result = await googleSignIn();
       } catch (err) {
         console.warn("Google Sign In failed, falling back to local mock user for testing:", err);
+        isMockUser = true;
         result = {
           user: {
             email: 'admin@reallifetrack.com',
@@ -1038,10 +1040,18 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       if (result) {
         setGoogleUser(result.user);
         setGoogleAccessToken(result.accessToken);
-        try {
-          await syncAllToGoogleCalendar(result.accessToken);
-        } catch (e) {
-          console.warn("Google calendar sync skipped in local mock mode:", e);
+        // Com usuário mock (Google/Firebase indisponível), nem tenta
+        // sincronizar — um token falso NUNCA vai autenticar contra a API
+        // real do Google Calendar. Antes disso, o login ficava preso por
+        // ~13s esperando esse fetch falhar de vez (fetchGoogleEvents com
+        // 'mock-access-token' sempre dá erro de rede/401 antes de deixar
+        // o usuário passar do login).
+        if (!isMockUser) {
+          try {
+            await syncAllToGoogleCalendar(result.accessToken);
+          } catch (e) {
+            console.warn("Google calendar sync failed:", e);
+          }
         }
       }
     } catch (err) {
