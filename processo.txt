@@ -1,0 +1,354 @@
+================================================================================
+PROCESSO.TXT — Plano Mestre de Reconstrução do RLT 3.0 APK
+================================================================================
+Criado em: 01/08/2026 por Claude (Sonnet 5) — a partir de diagnostico.txt,
+do relatório de bugs visuais/lógica (Jean) e da comparação completa com o
+repositório de referência github.com/jeanrsl098/C-rebro (a "versão web").
+
+COMO USAR ESTE DOCUMENTO (para quem for implementar):
+  - Ordem de prioridade é a ordem das partes abaixo. Não pule para a Parte 2
+    antes de fechar a Parte 1, salvo item explicitamente marcado "pode ser
+    paralelo".
+  - Marque [x] só quando o item estiver implementado E buildando sem erro
+    (rodar `npx tsc --noEmit` e `npm run build` antes de marcar).
+  - Cada item marcado deve corresponder a pelo menos um commit no git com
+    mensagem descritiva referenciando o item.
+  - Alvo de arquitetura: app NATIVO (Capacitor/Android), não PWA. Onde o
+    C-rebro (referência web) usa algo específico de navegador/service worker,
+    adaptar para o equivalente nativo, não copiar literalmente.
+  - Segurança crítica (login real, chave de API fora do bundle, LGPD) é
+    BAIXA PRIORIDADE por decisão do responsável do projeto — ver Parte 5.
+    Só mexer nisso de graça quando já estiver tocando o mesmo arquivo por
+    outro motivo, nunca abrir frente própria pra isso agora.
+  - Registrar cada entrega em corrigir.txt (changelog de execução, recriado
+    do zero — nunca existiu no repositório antes deste plano).
+
+--------------------------------------------------------------------------------
+PARTE 1 — CÉREBRO (IA / "RLT ENGINE") — PRIORIDADE MÁXIMA
+--------------------------------------------------------------------------------
+Referência: src/lib/brainOrchestrator.ts (1254 linhas), brainOrchestratorTest.ts,
+lib/i18n.ts, lib/imageCompressor.ts, lib/logger.ts, lib/version.ts,
+components/AIAssistant.tsx (817 linhas) no repositório C-rebro.
+Hoje nosso AIAssistant.tsx tem 173 linhas e é só um chat sem execução de
+comandos — é o maior gargalo funcional do app inteiro.
+
+1.1 Motor de comandos em linguagem natural (núcleo do Cérebro)
+  [ ] Criar src/lib/brainOrchestrator.ts (ou equivalente nativo) capaz de:
+  [ ]   Segmentar frases com múltiplas intenções numa mesma mensagem
+        (ex.: "bebi 200ml de água e fiz supino com 40kg" = 2 ações)
+  [ ]   Classificar cada segmento por domínio: ÁGUA / REFEIÇÕES / TREINO /
+        EXAMES / AGENDA / MEDICAMENTOS / PERFIL / TEMA / CONSULTA (query)
+  [ ]   Executar a ação real no HealthContext (CRUD) para cada domínio,
+        não apenas responder em texto
+  [ ]   Extrair e simplificar nomes automaticamente (ex.: frase longa sobre
+        treino de peito → título "Supino Reto"; frase sobre exame →
+        "Hemograma Completo")
+  [ ]   Interpretar datas em linguagem natural corretamente ("dia 15 de
+        julho", "12/08 às 15h30", "a partir de 15/07") e gravar na data
+        certa, não sempre "hoje"
+  [ ]   Medicamentos contínuos: registrar apenas a data de início e gerar
+        os eventos futuros de dose automaticamente (não duplicar todo dia
+        manualmente)
+  [ ]   Alterar objetivo do perfil por comando de voz/texto (ex.: "meu
+        objetivo agora é emagrecimento" → muda Weight Loss/Muscle
+        Gain/Maintenance/Health)
+  [ ]   Alternar tema claro/escuro por comando
+  [ ]   Corrigir dados existentes por comando ("na verdade minha altura é
+        180cm, corrige")
+  [ ]   Manter um log de auditoria/transação (transactionLog) de tudo que
+        o Cérebro executou, para poder depurar o que ele fez
+  [ ] Criar um harness de teste (equivalente a brainOrchestratorTest.ts)
+      que roda uma bateria de frases de teste e confere se cada domínio
+      foi corretamente identificado/executado
+
+1.2 Reconstrução do AIAssistant.tsx
+  [ ] Roteamento local primeiro (usa o orchestrator acima) e só cai na
+      chamada de IA generativa quando não for um comando estruturado —
+      evita gastar chamada de API para "bebi 200ml de água"
+  [ ] Histórico de múltiplas sessões de conversa, persistido localmente
+      (criar/apagar/fixar/renomear/buscar sessão)
+  [ ] Limite de 15 mensagens visíveis com botão de expandir/ver histórico
+      completo (evitar conversa crescendo infinitamente na tela)
+  [ ] Scroll automático para novas mensagens
+  [ ] Entrada por voz (gravação de áudio, tratamento de erro de permissão
+      de microfone)
+  [ ] Anexo de imagem/arquivo na conversa, com compressão antes de enviar
+      (ver 1.3)
+  [ ] Tratamento diferenciado de erro: distinguir "sem internet", "chave
+      inválida", "limite de cota/rate limit (429/503)" e mostrar mensagem
+      específica em vez do genérico "Ops, estou com dificuldades de
+      conexão" — se possível, mostrar um resumo dos dados do dia como
+      fallback quando a IA estiver indisponível
+  [ ] Quando a chamada de IA falhar, o app não pode travar/branquear —
+      cair graciosamente (depende também do ErrorBoundary da Parte 4)
+
+1.3 Suporte / utilidades do Cérebro
+  [ ] lib/imageCompressor.ts (ou equivalente nativo) — reduzir imagem
+      antes de enviar para IA (evitar OOM/timeout em celular)
+  [ ] Parsing robusto de JSON vindo da IA — hoje o app faz
+      `JSON.parse(response.text)` direto e quebra com resposta malformada;
+      implementar reparo/recuperação de JSON (ex.: extrair bloco entre
+      chaves, remover cercas de markdown, biblioteca tipo `jsonrepair`)
+      antes de tentar parsear
+  [ ] lib/logger.ts — captura global de erros (window.onerror /
+      unhandledrejection nativo/WebView), persistir últimos N erros,
+      permitir exportar relatório de diagnóstico
+  [ ] lib/version.ts — versão de build exposta no app, diagnóstico de
+      consistência (últimos builds, se há cache desatualizado)
+  [ ] Bem-estar mental (MentalWellBeing em Home.tsx): CONFIRMAR que
+      generateQuestions já usa contexto real (metas, rotinas, histórico
+      médico, último score) para gerar perguntas dinâmicas via IA — isso
+      já existe hoje, não recriar do zero. Investigar apenas se existe
+      algum fallback estático quando a chamada de IA falha e, se sim,
+      deixar esse fallback claro/rotulado como fallback, não substituir a
+      lógica dinâmica que já funciona.
+
+--------------------------------------------------------------------------------
+PARTE 2 — HEALTH CONNECT (substituto oficial do Google Fit) — PRIORIDADE 2
+--------------------------------------------------------------------------------
+Decisão confirmada: usar Health Connect (androidx.health.connect), não a API
+legada do Google Fit (em descontinuação pelo Google) nem só o acelerômetro
+puro do Capacitor. Health Connect precisa: (a) o app Health Connect instalado
+no aparelho (nativo a partir do Android 14, instalável em versões antes
+disso), (b) declarar permissões de leitura/escrita por tipo de dado, (c) o
+usuário conceder essas permissões pela UI do próprio Health Connect.
+
+2.1 Infraestrutura nativa
+  [ ] Adicionar dependência do Health Connect Client
+      (androidx.health.connect:connect-client) no build.gradle nativo
+      Android
+  [ ] Avaliar/instalar um plugin Capacitor de Health Connect existente ou
+      escrever uma ponte nativa própria (plugin Capacitor customizado em
+      Kotlin) se não houver plugin maduro o suficiente
+  [ ] Declarar no AndroidManifest.xml as permissões novas necessárias:
+      android.permission.health.READ_STEPS,
+      android.permission.health.WRITE_STEPS (e demais tipos usados —
+      distância, calorias ativas, frequência cardíaca, sono, peso —
+      conforme o que for implementado abaixo)
+  [ ] Também adicionar as permissões nativas de sensor que faltam hoje
+      (confirmadas ausentes no diagnostico.txt): ACTIVITY_RECOGNITION,
+      BODY_SENSORS, HIGH_SAMPLING_RATE_SENSORS, POST_NOTIFICATIONS,
+      ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, FOREGROUND_SERVICE,
+      FOREGROUND_SERVICE_HEALTH, FOREGROUND_SERVICE_LOCATION, WAKE_LOCK,
+      RECEIVE_BOOT_COMPLETED
+  [ ] Tela/fluxo de solicitação de permissões explicando ao usuário por
+      que cada permissão é necessária (equivalente ao
+      SystemPermissionsModal.tsx do C-rebro), com estado
+      concedido/negado por permissão
+
+2.2 Dados a sincronizar com Health Connect (substituindo os mocks atuais)
+  [ ] Passos — LER de Health Connect. Isso corrige o bug crítico confirmado
+      em HealthContext.tsx (getTodayValue hardcoded retornando 7240
+      sempre) e os outros dois pontos que usam o mesmo fallback fixo
+      (cálculo de calorias por passos)
+  [ ] Distância percorrida (caminhada/corrida/ciclismo) — LER/GRAVAR
+  [ ] Calorias ativas gastas — LER, usar no lugar do cálculo manual atual
+      de "stepsBurned" em getDailyCalorieTarget
+  [ ] Sessões de exercício/treino — GRAVAR no Health Connect quando o
+      usuário registrar um treino no app (para aparecer também no
+      Google Fit/outros apps de saúde do aparelho)
+  [ ] Frequência cardíaca (se disponível no aparelho/wearable pareado) —
+      LER, se fizer sentido no fluxo de treino
+  [ ] Sono — avaliar LER se o app tiver alguma tela de sono (checar se
+      HealthContext já modela isso; se não, não inventar tela nova só por
+      causa do Health Connect, só documentar como pendência)
+  [ ] Peso — sincronizar peso do perfil com Health Connect (leitura e
+      escrita bidirecional, com o usuário podendo escolher a fonte de
+      verdade)
+  [ ] Sincronização em segundo plano: ler dados novos do Health Connect
+      periodicamente mesmo com o app fechado (worker/serviço em segundo
+      plano nativo — não existe hoje nenhum mecanismo de background sync
+      no app)
+
+2.3 Localização/GPS (complementar ao Health Connect, para trajetos)
+  [ ] Rastreamento de distância via GPS para atividades ao vivo
+      (caminhada/corrida/ciclismo), usando localização nativa com cálculo
+      de distância — equivalente ao services/locationService.ts do
+      C-rebro, adaptado para Health Connect quando aplicável
+  [ ] Persistir atividade em andamento no estado global (HealthContext),
+      não em estado local do componente — hoje uma atividade em progresso
+      se perde se o usuário sair da tela de Exercícios
+
+--------------------------------------------------------------------------------
+PARTE 3 — RELATÓRIO DE BUGS VISUAIS/IDIOMA/LÓGICA (Jean) — PRIORIDADE 3
+--------------------------------------------------------------------------------
+Itens confirmados por leitura direta do código atual (ver anotações de
+verificação entre colchetes).
+
+3.1 Layout/Visual
+  [ ] Remover o botão flutuante de logout no topo de Layout.tsx (linhas
+      ~28-35) — confirmado sobreposto/redundante com o logout que deve
+      existir em Profile.tsx (ver Parte 4, Profile hoje tem botão de
+      logout sem onClick — corrigir os dois juntos)
+  [ ] Tratamento de erro de imagem (onError) no avatar de perfil em
+      Home.tsx (~110-119) e Profile.tsx (~66-70): se a URL falhar, cair
+      para iniciais do nome ou ícone padrão de usuário — nunca mostrar
+      ícone de imagem quebrada + texto "alt" cru
+
+3.2 Idioma (app está híbrido: navegação em PT, resto majoritariamente EN)
+  [ ] Decisão de arquitetura primeiro: implementar sistema de tradução
+      real (equivalente a lib/i18n.ts do C-rebro) em vez de traduzir
+      string por string hardcoded — evita reabrir esse mesmo problema
+      depois. [confirmado: nav labels já em PT (Layout.tsx:42
+      label="Início"), resto do app em inglês hardcoded]
+  [ ] Home.tsx: Good morning, formatação de data (trocar locale para
+      pt-BR), Health Score, mensagens do card de bem-estar mental, Daily
+      Goals, Calories/Protein/Water/Steps, Fat Loss Trend, SURPLUS/DEFICIT,
+      Recent Notifications, Clear All, Daily Agenda, Smart Insights
+  [ ] Nutrition.tsx: Daily Macro Overview, Today's Meals, Macro History,
+      Breakfast/Lunch/Dinner/Snack, Log New Meal, What did you eat?
+  [ ] Exercises.tsx: Scheduled Routines, Step Goal, Every day,
+      Monday-Friday, Walking/Running/Cycling/Gym/Other, Cardio/Gym
+      Session, Volume/Sets/Reps/Weight, grupos musculares
+  [ ] Medical.tsx: Medical History, Exams, Consultations, Medical
+      Certificates, Emergency, Family History, Stress Reports
+  [ ] Onboarding.tsx e Login.tsx (ajustar textos; NÃO mexer na lógica de
+      autenticação aqui — isso é Parte 5)
+
+3.3 Lógica/Cálculos
+  [ ] getDailyCalorieTarget (HealthContext.tsx ~312-363): já existe
+      fallback `|| 75/180/28` para peso/altura/idade — mas a subtração
+      `tdee - (fatLossGoal.targetValue || 500)` (linha ~359) NÃO tem piso
+      mínimo. Adicionar clamp (ex.: nunca retornar menos que um valor
+      mínimo seguro, tipo 1200 kcal) e também validar que
+      fatLossGoal.targetValue é um número finito antes de subtrair, para
+      cobrir o caso de dado corrompido gerando resultado
+      absurdamente negativo
+  [ ] Contador de passos travado em 7240 — RESOLVIDO pela Parte 2 (Health
+      Connect); não duplicar esforço aqui, só confirmar que os 3 pontos em
+      HealthContext.tsx (linhas ~338, ~439, ~607) passam a usar dado real
+  [ ] Score de Saúde (/100) ficando vazio/NaN: consequência do item
+      anterior (calorie target quebrado) — deve se resolver junto, mas
+      adicionar proteção extra contra NaN nas fórmulas internas do score
+      mesmo assim (defesa em profundidade)
+
+3.4 Agenda/Rotinas
+  [ ] Home.tsx (~442-464): substituir a lista hardcoded de Agenda Diária
+      (Breakfast 08:00/Workout 10:30/Meditation 18:00, sem onClick) por
+      mapeamento dinâmico das rotinas reais cadastradas no HealthContext
+      (routines), incluindo horários de medicação vindos de registros
+      médicos ativos
+  [ ] Conectar onClick de cada item da agenda para marcar como
+      concluído/pendente de fato (atualizar o registro correspondente no
+      context)
+  [ ] O item "Meditation" só deve aparecer se o usuário tiver de fato uma
+      rotina de meditação cadastrada — não exibir item fantasma
+
+--------------------------------------------------------------------------------
+PARTE 4 — PARIDADE ESTRUTURAL COM A VERSÃO WEB (demais lacunas) — PRIORIDADE 4
+--------------------------------------------------------------------------------
+Itens do diagnostico.txt não cobertos nas partes acima. Adaptar cada um para
+arquitetura nativa (não copiar padrões específicos de navegador/PWA).
+
+4.1 Telas inteiras ausentes
+  [ ] PerformanceDashboard — painel "Bio-Status" com gráfico radar
+      (força/nutrição/vitalidade/foco/condicionamento), navegação por
+      data, diagnóstico gerado por IA, exportação de imagem (usar
+      biblioteca de gráficos tipo recharts + captura de tela nativa em
+      vez de html2canvas, que é de navegador)
+  [ ] ShareModal — exportar/compartilhar cards de progresso como imagem,
+      usando compartilhamento nativo do Android (Share Sheet) em vez de
+      navigator.share (web)
+  [ ] DiagnosticModal — painel de diagnóstico embutido (versão do build,
+      status de sincronização, "forçar limpeza e recarregar")
+  [ ] PrivacySecurity — tela de privacidade: exportar dados do usuário,
+      limpar cache de mídia, visualizar/exportar/limpar logs de erro
+  [ ] LanguageRegional — seletor de idioma (usar o sistema de i18n da
+      Parte 3.2)
+  [ ] HelpSupport — central de ajuda com busca por IA (usa o Cérebro da
+      Parte 1) e tutoriais guiados
+  [ ] RltLogo — componente de marca reutilizável com fallback (hoje cai
+      para emoji genérico)
+  [ ] Modal — primitivo de modal compartilhado (hoje Profile.tsx duplica
+      um modal local próprio; consolidar antes de portar as telas acima
+      que dependem de um modal compartilhado)
+
+4.2 Medical.tsx / HistoryForm.tsx
+  [ ] Adicionar categoria "Medicação Contínua" (prescrição, validade,
+      dosagem, agenda de horários de dose repetíveis, insights de IA
+      sobre a medicação)
+  [ ] Adicionar categoria "Sinais Vitais de Rotina" (pressão arterial,
+      glicemia com estado jejum/pré/pós-prandial, métrica livre "outro")
+  [ ] Atualizar types.ts com os tipos correspondentes
+      (ContinuousMedicationRecord, RoutineVitalsRecord, etc.) — hoje o
+      modelo de dados não suporta essas categorias, não é só UI faltando
+  [ ] Gráficos de tendência de sinais vitais ao longo do tempo
+  [ ] Compressão de imagem antes de anexar documento/exame (reusar 1.3)
+  [ ] Ampliar tipos de arquivo aceitos no upload (hoje mais restrito que
+      a versão web)
+
+4.3 Exercises.tsx
+  [ ] Aba dedicada de Biblioteca de Exercícios com busca e filtro por
+      grupo muscular
+  [ ] Edição de logs de treino já registrados (hoje só permite adicionar,
+      não editar)
+  [ ] Link para o Performance Dashboard (item 4.1)
+
+4.4 Nutrition.tsx
+  [ ] Entrada manual de código de barras como apoio à análise por IA
+  [ ] Upload/análise de múltiplas imagens (não só uma foto por vez)
+  [ ] Etapa de revisão/edição do resultado da IA antes de salvar (hoje
+      salva direto o que a IA retornar, sem o usuário conferir/corrigir)
+
+4.5 WaterTracking.tsx
+  [ ] Corrigir bug confirmado: novo registro de água sempre grava contra
+      `new Date()` (hoje), ignorando a data selecionada globalmente —
+      deve usar a data selecionada do contexto, igual as outras telas
+
+4.6 Calendar.tsx
+  [ ] Remover ou implementar de fato o aviso "este evento será
+      sincronizado com Google e Apple Calendar" — hoje é uma promessa
+      falsa na interface, não existe sincronização nenhuma
+  [ ] Se for implementar sincronização real de agenda, usar Google
+      Calendar API com OAuth nativo (Google Sign-In no Android) — MAS
+      isso é DIFERENTE de Health Connect (Parte 2) e de menor prioridade;
+      não misturar os dois escopos
+
+4.7 Profile.tsx
+  [ ] Corrigir os 3 botões sem onClick (Privacidade & Segurança / Idioma /
+      Ajuda & Suporte) e o botão de Sair sem onClick — ligar às telas da
+      Parte 4.1 e às rotas correspondentes em App.tsx (hoje as rotas nem
+      existem)
+  [ ] Alternância de tema claro/escuro
+  [ ] Alternância de unidades métrico/imperial
+  [ ] Entrada de configuração de chave de API pelo próprio usuário (isso
+      também ajuda a Parte 5, sem precisar abrir frente de segurança
+      separada — é natural implementar aqui)
+  [ ] Exportação de dados do usuário
+
+4.8 Notifications.tsx
+  [ ] Botão "Limpar Tudo" (clearAllNotifications ausente também no
+      context)
+
+4.9 Onboarding.tsx
+  [ ] Adicionar campo de nome (ausente hoje)
+  [ ] Validar idade/peso/altura antes de avançar (hoje aceita
+      zero/valores inválidos)
+  [ ] Persistir corretamente a flag de onboarding concluído
+
+--------------------------------------------------------------------------------
+PARTE 5 — SEGURANÇA (BAIXA PRIORIDADE / OPORTUNISTA) — não abrir frente própria
+--------------------------------------------------------------------------------
+Fazer somente quando o mesmo arquivo já estiver sendo tocado por outro item
+acima. Não gastar um ciclo de trabalho dedicado só a isto agora, por decisão
+do responsável do projeto.
+
+  [ ] Login real (substituir stub admin/123456 hardcoded) — ligado à Parte
+      2 se usar Google Sign-In para Health Connect/Calendar, aproveitar a
+      mesma implementação de auth
+  [ ] Tirar a chave da API Gemini do bundle do cliente — resolver
+      naturalmente junto com 4.7 (configuração de chave pelo usuário) e
+      com a Parte 1 (reconstrução do Cérebro já mexe em todos os pontos
+      que instanciam o cliente Gemini)
+  [ ] ErrorBoundary global — priorizar mesmo assim, porque impacta
+      diretamente a confiabilidade do Cérebro (Parte 1): sem isso, uma
+      resposta malformada da IA derruba o app inteiro com tela branca.
+      Tratar como parte da entrega da Parte 1, não como item de segurança
+      isolado
+  [ ] Anonimização de dados antes de enviar para IA (LGPD) — avaliar só
+      se sobrar tempo; não bloqueia nenhuma funcionalidade
+
+================================================================================
+FIM DO PLANO — marcar itens conforme forem implementados e commitados.
+Ver corrigir.txt para o changelog detalhado de execução (criado à parte).
+================================================================================
