@@ -25,6 +25,8 @@ export default function Profile() {
   const [keySuccess, setKeySuccess] = useState(false);
   const [isKeyExpanded, setIsKeyExpanded] = useState(false);
   const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('rlt_ai_provider') || 'gemini');
+  const [avatarError, setAvatarError] = useState(false);
+
 
 
   useEffect(() => {
@@ -85,11 +87,11 @@ export default function Profile() {
       <div className="flex-1 p-6 flex flex-col items-center">
         <div className="relative group">
           <div className="size-40 rounded-full bg-slate-100 dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-xl overflow-hidden">
-            {avatar ? (
-              <img src={avatar} alt={t('profile.title')} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            {avatar && !avatarError ? (
+              <img src={avatar} alt={t('profile.title')} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={() => setAvatarError(true)} />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-slate-300">
-                <ImageIcon className="size-16" />
+              <div className="w-full h-full flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-450 dark:text-slate-500 font-black text-2xl">
+                {profile.name.substring(0, 2).toUpperCase()}
               </div>
             )}
           </div>

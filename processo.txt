@@ -145,58 +145,58 @@ declarar permissões de leitura/escrita por tipo de dado, (c) o usuário
 conceder essas permissões pela UI do próprio Health Connect.
 
 2.1 Infraestrutura nativa
-  [ ] Adicionar dependência do Health Connect Client
+  [x] Adicionar dependência do Health Connect Client
       (androidx.health.connect:connect-client) no build.gradle nativo
       Android
-  [ ] Avaliar/instalar um plugin Capacitor de Health Connect existente ou
+  [x] Avaliar/instalar um plugin Capacitor de Health Connect existente ou
       escrever uma ponte nativa própria (plugin Capacitor customizado em
       Kotlin) se não houver plugin maduro o suficiente
-  [ ] Declarar no AndroidManifest.xml as permissões novas necessárias:
+  [x] Declarar no AndroidManifest.xml as permissões novas necessárias:
       android.permission.health.READ_STEPS,
       android.permission.health.WRITE_STEPS (e demais tipos usados —
       distância, calorias ativas, frequência cardíaca, sono, peso —
       conforme o que for implementado abaixo)
-  [ ] Também adicionar as permissões nativas de sensor que faltam hoje
+  [x] Também adicionar as permissões nativas de sensor que faltam hoje
       (confirmadas ausentes no diagnostico.txt): ACTIVITY_RECOGNITION,
       BODY_SENSORS, HIGH_SAMPLING_RATE_SENSORS, POST_NOTIFICATIONS,
       ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, FOREGROUND_SERVICE,
       FOREGROUND_SERVICE_HEALTH, FOREGROUND_SERVICE_LOCATION, WAKE_LOCK,
       RECEIVE_BOOT_COMPLETED
-  [ ] Tela/fluxo de solicitação de permissões explicando ao usuário por
+  [x] Tela/fluxo de solicitação de permissões explicando ao usuário por
       que cada permissão é necessária (equivalente ao
       SystemPermissionsModal.tsx do C-rebro), com estado
       concedido/negado por permissão
 
-2.2 Dados a sincronizar com Health Connect (substituindo os mocks atuais)
-  [ ] Passos — LER de Health Connect. Isso corrige o bug crítico confirmado
+2.2 Dados a sincronizar com Health Connect (substituindo os mocks antigos)
+  [x] Passos — LER de Health Connect. Isso corrige o bug crítico confirmado
       em HealthContext.tsx (getTodayValue hardcoded retornando 7240
       sempre) e os outros dois pontos que usam o mesmo fallback fixo
       (cálculo de calorias por passos)
-  [ ] Distância percorrida (caminhada/corrida/ciclismo) — LER/GRAVAR
-  [ ] Calorias ativas gastas — LER, usar no lugar do cálculo manual atual
+  [x] Distância percorrida (caminhada/corrida/ciclismo) — LER/GRAVAR
+  [x] Calorias ativas gastas — LER, usar no lugar do cálculo manual atual
       de "stepsBurned" em getDailyCalorieTarget
-  [ ] Sessões de exercício/treino — GRAVAR no Health Connect quando o
+  [x] Sessões de exercício/treino — GRAVAR no Health Connect quando o
       usuário registrar um treino no app (para aparecer também no
       Google Fit/outros apps de saúde do aparelho)
-  [ ] Frequência cardíaca (se disponível no aparelho/wearable pareado) —
+  [x] Frequência cardíaca (se disponível no aparelho/wearable pareado) —
       LER, se fizer sentido no fluxo de treino
-  [ ] Sono — avaliar LER se o app tiver alguma tela de sono (checar se
+  [x] Sono — avaliar LER se o app tiver alguma tela de sono (checar se
       HealthContext já modela isso; se não, não inventar tela nova só por
       causa do Health Connect, só documentar como pendência)
-  [ ] Peso — sincronizar peso do perfil com Health Connect (leitura e
+  [x] Peso — sincronizar peso do perfil com Health Connect (leitura e
       escrita bidirecional, com o usuário podendo escolher a fonte de
       verdade)
-  [ ] Sincronização em segundo plano: ler dados novos do Health Connect
+  [x] Sincronização em segundo plano: ler dados novos do Health Connect
       periodicamente mesmo com o app fechado (worker/serviço em segundo
       plano nativo — não existe hoje nenhum mecanismo de background sync
       no app)
 
 2.3 Localização/GPS (complementar ao Health Connect, para trajetos)
-  [ ] Rastreamento de distância via GPS para atividades ao vivo
+  [x] Rastreamento de distância via GPS para atividades ao vivo
       (caminhada/corrida/ciclismo), usando localização nativa com cálculo
       de distância — equivalente ao services/locationService.ts do
       C-rebro, adaptado para Health Connect quando aplicável
-  [ ] Persistir atividade em andamento no estado global (HealthContext),
+  [x] Persistir atividade em andamento no estado global (HealthContext),
       não em estado local do componente — hoje uma atividade em progresso
       se perde se o usuário sair da tela de Exercícios
 

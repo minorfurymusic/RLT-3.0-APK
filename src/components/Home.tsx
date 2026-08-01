@@ -58,7 +58,9 @@ export default function Home() {
     isDayEnded,
     meals,
     routines,
+    updateRoutine,
     historyRecords,
+
     selectedDate,
     toggleAdherence,
     appLanguage,
@@ -66,6 +68,8 @@ export default function Home() {
   } = useHealth();
   
   const [view, setView] = useState<'main' | 'mental'>('main');
+  const [avatarError, setAvatarError] = useState(false);
+
 
   const targetDate = new Date(selectedDate + 'T12:00:00');
   const targetDateStr = targetDate.toDateString();
@@ -130,7 +134,21 @@ export default function Home() {
   const visibleNotifications = notifications
     .filter(n => !dismissedNotificationIds.includes(n.id))
     .slice(0, 2);
-  const todayEvents = events.filter(e => new Date(e.date).toDateString() === targetDateStr);
+  const routineEvents = activeRoutines.map(r => ({
+    id: `routine-${r.id}`,
+    title: r.name,
+    description: r.type === 'gym' ? (appLanguage === 'pt-BR' ? 'Treino na Academia' : 'Gym Workout') : (appLanguage === 'pt-BR' ? 'Exercício físico' : 'Physical Exercise'),
+    date: targetIsoDate,
+    time: r.time || '08:00',
+    type: 'workout',
+    status: r.completed ? 'completed' : 'pending',
+    linkedId: r.id
+  }));
+  const todayEvents = [
+    ...events.filter(e => new Date(e.date).toDateString() === targetDateStr),
+    ...routineEvents
+  ].sort((a, b) => a.time.localeCompare(b.time));
+
 
   const stressManagementGoal = goals.find(g => g.id === 'g12' && g.selected);
   const mentalHealthGoal = goals.find(g => g.id === 'g15' && g.selected);
@@ -169,8 +187,8 @@ export default function Home() {
             onClick={() => navigate('/profile')}
             className="size-12 rounded-full bg-primary/20 flex items-center justify-center border-2 border-primary overflow-hidden transition-transform active:scale-90"
           >
-            {avatar ? (
-              <img className="w-full h-full object-cover" src={avatar} alt={t('profile.title')} referrerPolicy="no-referrer" />
+            {avatar && !avatarError ? (
+              <img className="w-full h-full object-cover" src={avatar} alt={t('profile.title')} referrerPolicy="no-referrer" onError={() => setAvatarError(true)} />
             ) : (
               <div className="text-primary font-bold">{profile.name.substring(0, 2).toUpperCase()}</div>
             )}
@@ -462,7 +480,19 @@ export default function Home() {
             todayEvents.map(event => (
               <AgendaItem 
                 key={event.id}
-                onClick={() => navigate('/calendar')}
+                onClick={() => {
+                  if (event.type === 'workout' && event.linkedId) {
+                    const r = routines.find(rout => rout.id === event.linkedId);
+                    if (r) {
+                      updateRoutine(event.linkedId, { 
+                        completed: !r.completed,
+                        lastCompletedDate: !r.completed ? new Date().toISOString() : undefined 
+                      });
+                    }
+                  } else {
+                    navigate('/calendar');
+                  }
+                }}
                 icon={
                   event.type === 'medical' ? <Stethoscope className="size-5 text-blue-600" /> :
                   event.type === 'workout' ? <Walk className="size-5 text-emerald-600" /> :
@@ -478,10 +508,18 @@ export default function Home() {
                   event.type === 'medication' ? "bg-red-100" :
                   "bg-orange-100"
                 } 
-                isMedication={event.type === 'medication'}
-                status={event.status}
+                isMedication={event.type === 'medication' || event.type === 'workout'}
+                status={event.type === 'workout' ? (event.status === 'completed' ? 'taken' : 'pending') : event.status}
                 onToggleAdherence={(status: 'taken' | 'missed') => {
-                  if (event.linkedId) {
+                  if (event.type === 'workout' && event.linkedId) {
+                    const r = routines.find(rout => rout.id === event.linkedId);
+                    if (r) {
+                      updateRoutine(event.linkedId, { 
+                        completed: status === 'taken',
+                        lastCompletedDate: status === 'taken' ? new Date().toISOString() : undefined 
+                      });
+                    }
+                  } else if (event.linkedId) {
                     toggleAdherence(event.linkedId, event.date, event.time, status);
                   }
                 }}
