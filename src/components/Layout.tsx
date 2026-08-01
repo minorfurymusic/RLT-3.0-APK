@@ -1,98 +1,99 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Home, History, Utensils, FitnessCenter, Brain, Plus, X, Beef, Dumbbell, Droplets, Footprints, Walk, UtensilsIconLucide, Flame } from './Icons';
-import { Share2, LogOut } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Outlet } from 'react-router-dom';
+import { Home, History, Utensils, FitnessCenter } from './Icons';
+import { Brain, Share2, Cpu } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { motion, AnimatePresence } from 'motion/react';
+import ShareModal from './ShareModal';
+import DiagnosticModal from './DiagnosticModal';
+import { useHealth } from '../context/HealthContext';
+import { APP_BUILD_VERSION, fetchLiveDiagnostics, useRegisterComponentRuntime } from '../lib/version';
+
+const RTL_LANGUAGES = ['ar-SA'];
 
 export default function Layout() {
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
-  const navigate = useNavigate();
+  useRegisterComponentRuntime('Layout');
+  const { appLanguage, t } = useHealth();
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('health_login');
-    window.location.reload();
-  };
+  useEffect(() => {
+    // Startup check
+    fetchLiveDiagnostics().then((diag) => {
+      console.log(`[RLT AUTO-DIAGNOSTIC] Build: ${diag.buildVersion} | SW: ${diag.swStatus} | Cache: ${diag.cacheCount} entries`);
+    });
+  }, []);
 
-  const quickAddOptions = [
-    { label: 'Calories', icon: <Flame className="size-6" />, color: 'bg-orange-500', path: '/metric/calories' },
-    { label: 'Protein', icon: <Beef className="size-6" />, color: 'bg-blue-500', path: '/metric/protein' },
-    { label: 'Water', icon: <Droplets className="size-6" />, color: 'bg-cyan-500', path: '/metric/hydration' },
-    { label: 'Steps', icon: <Footprints className="size-6" />, color: 'bg-emerald-500', path: '/metric/steps' },
-    { label: 'Exercise', icon: <Walk className="size-6" />, color: 'bg-primary', path: '/exercises' },
-    { label: 'Meal', icon: <UtensilsIconLucide className="size-6" />, color: 'bg-amber-500', path: '/nutrition' },
-  ];
+  const isRTL = RTL_LANGUAGES.includes(appLanguage);
 
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark flex flex-col max-w-md mx-auto border-x border-slate-200 dark:border-slate-800 relative">
-      {/* Floating Logout Button at the top right */}
-      <button 
-        onClick={handleLogout}
-        className="absolute top-4 right-4 z-50 p-2.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-red-500 active:scale-95 transition-all shadow-sm"
-        title="Sair"
-      >
-        <LogOut className="size-5" />
-      </button>
+    <div 
+      className="min-h-screen bg-background-light dark:bg-background-dark flex flex-col max-w-md mx-auto border-x border-slate-200 dark:border-slate-800 relative"
+      dir={isRTL ? 'rtl' : 'ltr'}
+    >
+      {/* Top Bar with Brand, Version Badge and Diagnostic Trigger */}
+      <header className="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="size-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+            <Brain className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-sm font-black tracking-tight text-slate-900 dark:text-slate-100 leading-none">
+              Real Life Track
+            </h1>
+            <div className="flex items-center gap-1.5 mt-1">
+              <button
+                onClick={() => setIsDiagnosticOpen(true)}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/60 dark:border-indigo-800/60 text-[9px] font-mono font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition-colors"
+                title="Abrir Diagnóstico do Ambiente"
+              >
+                <Cpu className="size-3" />
+                <span>Build: {APP_BUILD_VERSION}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
 
       <main className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-slate-900 border-t border-slate-850 px-2 pb-6 pt-3 flex justify-between items-center z-50">
-        <NavItem to="/" icon={<Home />} label="Início" />
-        <NavItem to="/medical" icon={<History />} label="Médico" />
-        <NavItem to="/ai" icon={<Brain />} label="Cérebro" />
-        <NavItem to="/nutrition" icon={<Utensils />} label="Nutrição" />
-        <NavItem to="/exercises" icon={<FitnessCenter />} label="Exercícios" />
-        <NavItem to="/profile" icon={<Share2 />} label="Compartilhar" />
+      {/* Barra de Navegação Inferior - 6 botões principais */}
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1 pb-5 pt-2 flex justify-between items-center z-50">
+        <NavItem to="/" icon={<Home />} label={t('nav.home')} />
+        <NavItem to="/medical" icon={<History />} label={t('nav.medical')} />
+        
+        {/* CÉREBRO IA na barra inferior */}
+        <NavLink
+          to="/ai"
+          className={({ isActive }) =>
+            cn(
+              "flex flex-1 flex-col items-center gap-1 transition-colors",
+              isActive ? "text-indigo-600 dark:text-indigo-400 font-bold" : "text-slate-400 dark:text-slate-500"
+            )
+          }
+        >
+          <Brain className="size-6 text-indigo-600 dark:text-indigo-400" />
+          <span className="text-[10px] font-bold uppercase tracking-tight text-indigo-600 dark:text-indigo-400">🧠 Cérebro</span>
+        </NavLink>
+
+        <NavItem to="/nutrition" icon={<Utensils />} label={t('nav.nutrition')} />
+        <NavItem to="/exercises" icon={<FitnessCenter />} label={t('nav.exercises')} />
+
+        {/* 6º Botão Principal: Compartilhar */}
+        <button
+          id="btn-nav-share"
+          onClick={() => setIsShareOpen(true)}
+          className="flex flex-1 flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+          title="Compartilhar Progresso"
+        >
+          <Share2 className="size-6" />
+          <span className="text-[10px] font-bold uppercase tracking-tight">Compartilhar</span>
+        </button>
       </nav>
 
-      {/* Quick Add Floating Button (on bottom right, above nav) */}
-      <button 
-        onClick={() => setIsQuickAddOpen(true)}
-        className="fixed bottom-24 right-4 z-40 bg-blue-600 text-white size-12 rounded-full shadow-lg shadow-blue-500/30 hover:scale-110 active:scale-95 transition-transform flex items-center justify-center"
-      >
-        <Plus className="size-6" />
-      </button>
-
-      {/* Quick Add Modal */}
-      <AnimatePresence>
-        {isQuickAddOpen && (
-          <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <motion.div 
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] p-8 pb-12"
-            >
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-bold">Quick Log</h3>
-                <button onClick={() => setIsQuickAddOpen(false)} className="p-2 rounded-full bg-slate-100 dark:bg-slate-800">
-                  <X className="size-6" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                {quickAddOptions.map((option) => (
-                  <button 
-                    key={option.label}
-                    onClick={() => {
-                      setIsQuickAddOpen(false);
-                      navigate(option.path);
-                    }}
-                    className="flex flex-col items-center gap-2 group"
-                  >
-                    <div className={cn("size-16 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform group-active:scale-90", option.color)}>
-                      {option.icon}
-                    </div>
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <ShareModal isOpen={isShareOpen} onClose={() => setIsShareOpen(false)} />
+      <DiagnosticModal isOpen={isDiagnosticOpen} onClose={() => setIsDiagnosticOpen(false)} />
     </div>
   );
 }
@@ -104,12 +105,12 @@ function NavItem({ to, icon, label }: { to: string; icon: React.ReactNode; label
       className={({ isActive }) =>
         cn(
           "flex flex-1 flex-col items-center gap-1 transition-colors",
-          isActive ? "text-blue-500" : "text-slate-500"
+          isActive ? "text-primary font-bold" : "text-slate-400 dark:text-slate-500"
         )
       }
     >
-      <span className="[&>svg]:size-5">{icon}</span>
-      <span className="text-[9px] font-bold uppercase tracking-tight">{label}</span>
+      <span className="[&>svg]:size-6">{icon}</span>
+      <span className="text-[10px] font-bold uppercase tracking-tight">{label}</span>
     </NavLink>
   );
 }

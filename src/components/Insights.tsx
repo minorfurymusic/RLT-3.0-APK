@@ -7,7 +7,7 @@ import { useHealth } from '../context/HealthContext';
 
 export default function Insights() {
   const navigate = useNavigate();
-  const { goals, userProfile } = useHealth();
+  const { goals, userProfile, t } = useHealth();
 
   const dynamicInsights = useMemo(() => {
     const list = [];
@@ -17,16 +17,16 @@ export default function Insights() {
     if (muscleGainGoal?.selectedOption === 'Yes') {
       list.push({
         id: 'muscle-1',
-        title: 'Hypertrophy Strategy',
-        content: 'Focus on 8-12 reps per set with progressive overload. Aim for 1.8g of protein per kg of body weight.',
+        title: t('insights.hypertrophyTitle'),
+        content: t('insights.hypertrophyContent'),
         icon: <Dumbbell className="size-5" />,
         color: 'text-indigo-500',
         bgColor: 'bg-indigo-50',
       });
       list.push({
         id: 'muscle-2',
-        title: 'Training Frequency',
-        content: 'For optimal muscle growth, hit each muscle group 2 times per week with at least 48h rest between.',
+        title: t('insights.trainingFreqTitle'),
+        content: t('insights.trainingFreqContent'),
         icon: <Activity className="size-5" />,
         color: 'text-blue-500',
         bgColor: 'bg-blue-50',
@@ -38,16 +38,16 @@ export default function Insights() {
     if (enduranceGoal?.selectedOption === 'Yes') {
       list.push({
         id: 'endurance-1',
-        title: 'Cardio Progression',
-        content: 'Increase your weekly running distance by no more than 10% to prevent overuse injuries.',
+        title: t('insights.cardioProgTitle'),
+        content: t('insights.cardioProgContent'),
         icon: <Zap className="size-5" />,
         color: 'text-amber-500',
         bgColor: 'bg-amber-50',
       });
       list.push({
         id: 'endurance-2',
-        title: 'Cycling Efficiency',
-        content: 'Maintain a cadence of 80-90 RPM during long rides to optimize aerobic capacity.',
+        title: t('insights.cyclingEffTitle'),
+        content: t('insights.cyclingEffContent'),
         icon: <Heart className="size-5" />,
         color: 'text-rose-500',
         bgColor: 'bg-rose-50',
@@ -59,8 +59,8 @@ export default function Insights() {
     if (fatLossGoal?.selectedOption === 'Yes') {
       list.push({
         id: 'fat-loss-1',
-        title: 'Caloric Deficit',
-        content: `Target a daily deficit of 300-500 kcal for sustainable fat loss of ~0.5kg per week.`,
+        title: t('insights.caloricDeficitTitle'),
+        content: t('insights.caloricDeficitContent'),
         icon: <Utensils className="size-5" />,
         color: 'text-emerald-500',
         bgColor: 'bg-emerald-50',
@@ -72,8 +72,8 @@ export default function Insights() {
     if (stressGoal?.selectedOption === 'Yes') {
       list.push({
         id: 'stress-1',
-        title: 'Mental Resilience',
-        content: 'Your current stress patterns suggest adding 10 minutes of mindfulness in the morning.',
+        title: t('insights.mentalResilienceTitle'),
+        content: t('insights.mentalResilienceContent'),
         icon: <Brain className="size-5" />,
         color: 'text-purple-500',
         bgColor: 'bg-purple-50',
@@ -84,8 +84,8 @@ export default function Insights() {
     if (list.length < 3) {
       list.push({
         id: 'default-1',
-        title: 'Hydration Alert',
-        content: 'You tend to drink 30% less water on weekends. Try setting a reminder.',
+        title: t('insights.hydrationAlertTitle'),
+        content: t('insights.hydrationAlertContent'),
         icon: <Clock className="size-5" />,
         color: 'text-cyan-500',
         bgColor: 'bg-cyan-50',
@@ -93,7 +93,7 @@ export default function Insights() {
     }
 
     return list;
-  }, [goals, userProfile]);
+  }, [goals, userProfile, t]);
 
   return (
     <div className="flex flex-col min-h-full bg-white dark:bg-slate-950">
@@ -105,17 +105,17 @@ export default function Insights() {
         <div className="p-2 rounded-lg bg-primary/10 text-primary">
           <Lightbulb className="size-6" />
         </div>
-        <h1 className="text-xl font-bold">Smart Insights</h1>
+        <h1 className="text-xl font-bold">{t('insights.title')}</h1>
       </header>
 
       <main className="p-6 space-y-4">
         <div className="bg-gradient-to-br from-secondary to-primary p-6 rounded-[2rem] text-white shadow-xl shadow-primary/20 mb-8">
           <div className="flex items-center gap-3 mb-4">
             <Sparkles className="size-6" />
-            <h2 className="text-lg font-bold">AI Analysis</h2>
+            <h2 className="text-lg font-bold">{t('common.aiAnalysis')}</h2>
           </div>
           <p className="text-white/90 leading-relaxed">
-            Based on your active goals and recent logs, we've generated personalized recommendations to help you reach your targets faster.
+            {t('common.aiAnalysisDesc')}
           </p>
         </div>
 
@@ -140,7 +140,7 @@ export default function Insights() {
         </div>
 
         <div className="mt-8 p-6 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 text-center">
-          <p className="text-sm text-slate-400">New insights are generated every 24 hours based on your logged data.</p>
+          <p className="text-sm text-slate-400">{t('common.aiInsightsDaily')}</p>
         </div>
       </main>
     </div>

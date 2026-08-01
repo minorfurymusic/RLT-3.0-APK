@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function WaterTracking() {
   const navigate = useNavigate();
-  const { waterLogs, addWaterLog, deleteWaterLog, getDailyWaterTarget, getTodayValue } = useHealth();
+  const { waterLogs, addWaterLog, deleteWaterLog, getDailyWaterTarget, getTodayValue, selectedDate, t } = useHealth();
   const [amount, setAmount] = useState(250);
 
   const todayWater = getTodayValue('hydration') * 1000; // in ml
@@ -17,11 +17,12 @@ export default function WaterTracking() {
     addWaterLog({
       amount,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      date: new Date().toISOString()
+      date: selectedDate === new Date().toISOString().split('T')[0] ? new Date().toISOString() : `${selectedDate}T12:00:00Z`
     });
   };
 
-  const todayLogs = waterLogs.filter(l => new Date(l.date).toDateString() === new Date().toDateString());
+  const targetDateStr = new Date(selectedDate + 'T12:00:00').toDateString();
+  const todayLogs = waterLogs.filter(l => new Date(l.date).toDateString() === targetDateStr);
 
   return (
     <motion.div 
@@ -33,7 +34,7 @@ export default function WaterTracking() {
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
           <ChevronLeft className="size-6" />
         </button>
-        <h1 className="text-xl font-bold tracking-tight flex-1">Hydration</h1>
+        <h1 className="text-xl font-bold tracking-tight flex-1">{t('water.title')}</h1>
         <Droplets className="size-6 text-cyan-500" />
       </header>
 
@@ -58,17 +59,17 @@ export default function WaterTracking() {
           </div>
           
           <div className="text-center">
-            <p className="text-sm font-medium text-slate-500 mb-1">Daily Target: {Math.round(target)}ml</p>
+            <p className="text-sm font-medium text-slate-500 mb-1">{t('water.dailyTarget', { target: Math.round(target) })}</p>
             <p className="text-xs text-cyan-600 font-bold bg-cyan-50 dark:bg-cyan-900/20 px-3 py-1 rounded-full">
-              {progress >= 100 ? "Goal Reached! 💧" : `${Math.round(target - todayWater)}ml remaining`}
+              {progress >= 100 ? t('water.goalReached') : t('water.remaining', { amount: Math.round(target - todayWater) })}
             </p>
           </div>
         </section>
 
         <section className="space-y-4">
           <div className="flex items-center justify-between px-2">
-            <h2 className="text-lg font-bold">Log Water</h2>
-            <span className="text-xs font-bold text-slate-400">Select Amount</span>
+            <h2 className="text-lg font-bold">{t('water.logWater')}</h2>
+            <span className="text-xs font-bold text-slate-400">{t('water.selectAmount')}</span>
           </div>
           
           <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800">

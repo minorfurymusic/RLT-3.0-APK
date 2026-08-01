@@ -19,6 +19,7 @@ import {
   ChevronRight,
   FileText,
   Image as ImageIcon,
+  ImageOff,
   Syringe,
   Stethoscope,
   Camera,
@@ -41,6 +42,7 @@ import {
   ChevronLeft,
   ChevronDown,
   Play,
+  Pause,
   Square,
   Timer,
   Map,
@@ -49,6 +51,10 @@ import {
   AlertTriangle,
   Heart,
   ShieldAlert,
+  ShieldCheck,
+  Fingerprint,
+  Download,
+  Lock,
   Users,
   PlusCircle,
   ClipboardList,
@@ -61,7 +67,20 @@ import {
   Zap,
   ArrowLeft,
   CheckCircle2,
-  Save
+  Save,
+  Moon,
+  Sun,
+  Upload,
+  RefreshCw,
+  Pencil,
+  HelpCircle,
+  Globe,
+  Smartphone,
+  Key,
+  Eye,
+  EyeOff,
+  LogOut,
+  Shield
 } from 'lucide-react';
 
 export const Home = HomeIcon;
@@ -69,7 +88,6 @@ export const History = HistoryIcon;
 export const Utensils = UtensilsIcon;
 export const FitnessCenter = FitnessCenterIcon;
 export const SmartToy = SmartToyIcon;
-export const UtensilsIconLucide = UtensilsIcon;
 
 export { 
   Bell, 
@@ -89,6 +107,7 @@ export {
   ChevronDown,
   FileText,
   ImageIcon,
+  ImageOff,
   Syringe,
   Stethoscope,
   Camera,
@@ -109,6 +128,7 @@ export {
   Target,
   Loader2,
   Play,
+  Pause,
   Square,
   Timer,
   Map,
@@ -117,6 +137,10 @@ export {
   AlertTriangle,
   Heart,
   ShieldAlert,
+  ShieldCheck,
+  Fingerprint,
+  Download,
+  Lock,
   Users,
   PlusCircle,
   ClipboardList,
@@ -129,5 +153,18 @@ export {
   Zap,
   ArrowLeft,
   CheckCircle2,
-  Save
+  Save,
+  Moon,
+  Sun,
+  Upload,
+  RefreshCw,
+  Pencil,
+  HelpCircle,
+  Globe,
+  Smartphone,
+  Key,
+  Eye,
+  EyeOff,
+  LogOut,
+  Shield
 };

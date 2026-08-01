@@ -40,69 +40,69 @@ Hoje nosso AIAssistant.tsx tem 173 linhas e é só um chat sem execução de
 comandos — é o maior gargalo funcional do app inteiro.
 
 1.1 Motor de comandos em linguagem natural (núcleo do Cérebro)
-  [ ] Criar src/lib/brainOrchestrator.ts (ou equivalente nativo) capaz de:
-  [ ]   Segmentar frases com múltiplas intenções numa mesma mensagem
+  [x] Criar src/lib/brainOrchestrator.ts (ou equivalente nativo) capaz de:
+  [x]   Segmentar frases com múltiplas intenções numa mesma mensagem
         (ex.: "bebi 200ml de água e fiz supino com 40kg" = 2 ações)
-  [ ]   Classificar cada segmento por domínio: ÁGUA / REFEIÇÕES / TREINO /
+  [x]   Classificar cada segmento por domínio: ÁGUA / REFEIÇÕES / TREINO /
         EXAMES / AGENDA / MEDICAMENTOS / PERFIL / TEMA / CONSULTA (query)
-  [ ]   Executar a ação real no HealthContext (CRUD) para cada domínio,
+  [x]   Executar a ação real no HealthContext (CRUD) para cada domínio,
         não apenas responder em texto
-  [ ]   Extrair e simplificar nomes automaticamente (ex.: frase longa sobre
+  [x]   Extrair e simplificar nomes automaticamente (ex.: frase longa sobre
         treino de peito → título "Supino Reto"; frase sobre exame →
         "Hemograma Completo")
-  [ ]   Interpretar datas em linguagem natural corretamente ("dia 15 de
+  [x]   Interpretar datas em linguagem natural corretamente ("dia 15 de
         julho", "12/08 às 15h30", "a partir de 15/07") e gravar na data
         certa, não sempre "hoje"
-  [ ]   Medicamentos contínuos: registrar apenas a data de início e gerar
+  [x]   Medicamentos contínuos: registrar apenas a data de início e gerar
         os eventos futuros de dose automaticamente (não duplicar todo dia
         manualmente)
-  [ ]   Alterar objetivo do perfil por comando de voz/texto (ex.: "meu
+  [x]   Alterar objetivo do perfil por comando de voz/texto (ex.: "meu
         objetivo agora é emagrecimento" → muda Weight Loss/Muscle
         Gain/Maintenance/Health)
-  [ ]   Alternar tema claro/escuro por comando
-  [ ]   Corrigir dados existentes por comando ("na verdade minha altura é
+  [x]   Alternar tema claro/escuro por comando
+  [x]   Corrigir dados existentes por comando ("na verdade minha altura é
         180cm, corrige")
-  [ ]   Manter um log de auditoria/transação (transactionLog) de tudo que
+  [x]   Manter um log de auditoria/transação (transactionLog) de tudo que
         o Cérebro executou, para poder depurar o que ele fez
-  [ ] Criar um harness de teste (equivalente a brainOrchestratorTest.ts)
+  [x] Criar um harness de teste (equivalente a brainOrchestratorTest.ts)
       que roda uma bateria de frases de teste e confere se cada domínio
       foi corretamente identificado/executado
 
 1.2 Reconstrução do AIAssistant.tsx
-  [ ] Roteamento local primeiro (usa o orchestrator acima) e só cai na
+  [x] Roteamento local primeiro (usa o orchestrator acima) e só cai na
       chamada de IA generativa quando não for um comando estruturado —
       evita gastar chamada de API para "bebi 200ml de água"
-  [ ] Histórico de múltiplas sessões de conversa, persistido localmente
+  [x] Histórico de múltiplas sessões de conversa, persistido localmente
       (criar/apagar/fixar/renomear/buscar sessão)
-  [ ] Limite de 15 mensagens visíveis com botão de expandir/ver histórico
+  [x] Limite de 15 mensagens visíveis com botão de expandir/ver histórico
       completo (evitar conversa crescendo infinitamente na tela)
-  [ ] Scroll automático para novas mensagens
-  [ ] Entrada por voz (gravação de áudio, tratamento de erro de permissão
+  [x] Scroll automático para novas mensagens
+  [x] Entrada por voz (gravação de áudio, tratamento de erro de permissão
       de microfone)
-  [ ] Anexo de imagem/arquivo na conversa, com compressão antes de enviar
+  [x] Anexo de imagem/arquivo na conversa, com compressão antes de enviar
       (ver 1.3)
-  [ ] Tratamento diferenciado de erro: distinguir "sem internet", "chave
+  [x] Tratamento diferenciado de erro: distinguir "sem internet", "chave
       inválida", "limite de cota/rate limit (429/503)" e mostrar mensagem
       específica em vez do genérico "Ops, estou com dificuldades de
       conexão" — se possível, mostrar um resumo dos dados do dia como
       fallback quando a IA estiver indisponível
-  [ ] Quando a chamada de IA falhar, o app não pode travar/branquear —
+  [x] Quando a chamada de IA falhar, o app não pode travar/branquear —
       cair graciosamente (depende também do ErrorBoundary da Parte 4)
 
 1.3 Suporte / utilidades do Cérebro
-  [ ] lib/imageCompressor.ts (ou equivalente nativo) — reduzir imagem
+  [x] lib/imageCompressor.ts (ou equivalente nativo) — reduzir imagem
       antes de enviar para IA (evitar OOM/timeout em celular)
-  [ ] Parsing robusto de JSON vindo da IA — hoje o app faz
+  [x] Parsing robusto de JSON vindo da IA — hoje o app faz
       `JSON.parse(response.text)` direto e quebra com resposta malformada;
       implementar reparo/recuperação de JSON (ex.: extrair bloco entre
       chaves, remover cercas de markdown, biblioteca tipo `jsonrepair`)
       antes de tentar parsear
-  [ ] lib/logger.ts — captura global de erros (window.onerror /
+  [x] lib/logger.ts — captura global de erros (window.onerror /
       unhandledrejection nativo/WebView), persistir últimos N erros,
       permitir exportar relatório de diagnóstico
-  [ ] lib/version.ts — versão de build exposta no app, diagnóstico de
+  [x] lib/version.ts — versão de build exposta no app, diagnóstico de
       consistência (últimos builds, se há cache desatualizado)
-  [ ] Bem-estar mental (MentalWellBeing em Home.tsx): CONFIRMAR que
+  [x] Bem-estar mental (MentalWellBeing em Home.tsx): CONFIRMAR que
       generateQuestions já usa contexto real (metas, rotinas, histórico
       médico, último score) para gerar perguntas dinâmicas via IA — isso
       já existe hoje, não recriar do zero. Investigar apenas se existe

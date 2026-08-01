@@ -1,0 +1,13 @@
+================================================================================
+CORRIGIR.TXT — Changelog de Execução do Real Life Track 3.0 APK
+================================================================================
+
+Este arquivo atua como o log de alterações e validações realizadas durante a
+portabilidade do app para paridade com o C-rebro e o Google Fit/Health Connect.
+
+--------------------------------------------------------------------------------
+[x] AUDITORIA DE SEGREDOS DE API (01/08/2026)
+  - Arquivos verificados: Histórico do Git (git log -p) e arquivos em disco (.env*)
+  - Resumo: Auditoria de chaves concluída com sucesso. Nenhuma chave de API do Gemini literal (AIzaSy...) encontrada no repositório local ou no histórico do git.
+  - Como validado: Varredura de expressões regulares executada nos logs e arquivos do disco.
+--------------------------------------------------------------------------------

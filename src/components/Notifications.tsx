@@ -7,7 +7,7 @@ import { cn } from '../lib/utils';
 
 export default function Notifications() {
   const navigate = useNavigate();
-  const { notifications, markNotificationRead } = useHealth();
+  const { notifications, markNotificationRead, clearAllNotifications } = useHealth();
 
   const getIcon = (type: string) => {
     switch (type) {
@@ -34,6 +34,14 @@ export default function Notifications() {
           </button>
           <h1 className="text-xl font-bold">Notifications</h1>
         </div>
+        {notifications.length > 0 && (
+          <button 
+            onClick={clearAllNotifications}
+            className="text-xs font-medium text-primary hover:opacity-70 transition-opacity"
+          >
+            Clear All
+          </button>
+        )}
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

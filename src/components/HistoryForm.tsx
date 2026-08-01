@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { compressImageIfNeeded } from '../lib/imageCompressor';
 import { 
   X, 
   Calendar, 
@@ -12,18 +13,18 @@ import {
   Plus,
   Trash2,
   Check,
+  CheckCircle2,
   PlusCircle,
   MapPin,
   Phone,
   Mail,
   Clock,
-  Paperclip,
+  Activity,
+  Upload,
   Loader2,
-  Sparkles,
-  ClipboardList,
-  Activity
+  Sparkles
 } from './Icons';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { useHealth } from '../context/HealthContext';
 import { 
   HistoryCategory, 
@@ -33,11 +34,10 @@ import {
   FamilyHistoryRecord,
   ExamCategory,
   ExamStatus,
-  BiomarkerResult,
-  MedicalCertificateRecord
+  BiomarkerResult
 } from '../types';
 import { cn } from '../lib/utils';
-import { extractExamData, extractReportData, extractCertificateData, ExtractionProgress } from '../services/aiMedicalService';
+import { extractMedicalData, generateMedicationInsights } from '../lib/ai';
 
 interface HistoryFormProps {
   category: HistoryCategory;
@@ -172,54 +172,14 @@ const RELATIONSHIPS = ['Mother', 'Father', 'Brother', 'Sister', 'Grandmother', '
 const CRITICAL_CONDITIONS = ['Severe asthma', 'Epilepsy', 'Diabetes requiring insulin', 'Heart disease', 'Blood clotting disorders', 'Severe allergies (anaphylaxis risk)', 'Other condition'];
 const ORGAN_DONOR_STATUSES = ['Registered organ donor', 'Not registered', 'Prefer not to say'];
 
-const PROFESSIONAL_TYPES = [
-  'General Practitioner',
-  'Cardiologist',
-  'Dermatologist',
-  'Endocrinologist',
-  'Neurologist',
-  'Orthopedist',
-  'Psychiatrist',
-  'Psychologist',
-  'Physiotherapist',
-  'Nutritionist',
-  'Dentist',
-  'Speech Therapist',
-  'Other'
-];
-
-const STRESS_SOURCES = [
-  'Work',
-  'Traffic',
-  'Family',
-  'Financial',
-  'Health',
-  'Other'
-];
-
-const FAMILY_HISTORY_CATEGORIES = [
-  'Cardiovascular diseases',
-  'Diabetes',
-  'Cancer',
-  'Neurological conditions',
-  'Autoimmune diseases',
-  'Mental health disorders',
-  'Other hereditary conditions'
-];
-
 export default function HistoryForm({ category, initialData, onComplete, onCancel }: HistoryFormProps) {
-  const { addHistoryRecord, updateHistoryRecord, historyRecords } = useHealth();
+  const { addHistoryRecord, updateHistoryRecord, historyRecords, appLanguage } = useHealth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [extractionProgress, setExtractionProgress] = useState<ExtractionProgress>({ step: 'idle', message: '', progress: 0 });
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanStatus, setScanStatus] = useState("");
   const [formData, setFormData] = useState<any>(() => {
-    if (initialData) {
-      return {
-        ...initialData,
-        date: new Date(initialData.date).toISOString().split('T')[0],
-        followUpDate: initialData.followUpDate ? new Date(initialData.followUpDate).toISOString().split('T')[0] : '',
-      };
-    }
-    return {
+    const defaults = {
       date: new Date().toISOString().split('T')[0],
       notes: [],
       examCategory: 'Blood Tests',
@@ -247,23 +207,183 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
       // Family History defaults
       relativeName: '',
       relationship: 'Mother',
-      age: undefined,
+      age: '',
       isLiving: true,
       conditions: [],
       // Stress Report defaults
       stressLevel: 5,
-      source: 'Work',
-      stressNotes: '',
       mood: 'Neutral',
       sleepQuality: 'Fair',
       triggers: [],
-      physicalSymptoms: []
+      physicalSymptoms: [],
+      // Continuous Medication defaults
+      prescriptionDate: new Date().toISOString().split('T')[0],
+      validityDate: '',
+      type: 'Remédio',
+      medicationName: '',
+      dosage: '',
+      times: ['08:00'],
+      aiInsights: '',
+      isActive: true,
+      // Routine Vitals defaults
+      subtype: 'Blood Pressure',
+      bloodPressure: { systolic: 120, diastolic: 80, pulse: 70 },
+      glucose: { value: 90, state: 'Jejum' },
+      other: { metric: '', value: '' }
     };
+
+    if (initialData) {
+      return {
+        ...defaults,
+        ...initialData,
+        date: new Date(initialData.date).toISOString().split('T')[0],
+        followUpDate: initialData.followUpDate ? new Date(initialData.followUpDate).toISOString().split('T')[0] : '',
+        prescriptionDate: initialData.prescriptionDate ? new Date(initialData.prescriptionDate).toISOString().split('T')[0] : defaults.prescriptionDate,
+        validityDate: initialData.validityDate ? new Date(initialData.validityDate).toISOString().split('T')[0] : '',
+        // Ensure nested objects are also merged if needed, but for now simple spread handles most
+      };
+    }
+    return defaults;
   });
 
   const medicalHistoryConditions = historyRecords
     .filter(r => r.category === 'Medical History')
     .map(r => (r as any).conditionName);
+
+  const handleScanClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
+
+  const handleGenerateInsights = async () => {
+    if (!formData.medicationName || !formData.dosage) return;
+    setIsGeneratingInsights(true);
+    const insights = await generateMedicationInsights(formData.medicationName, formData.dosage, appLanguage);
+    setFormData({ ...formData, aiInsights: insights });
+    setIsGeneratingInsights(false);
+  };
+
+  const handleFileScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsScanning(true);
+    setScanProgress(10);
+    setScanStatus(`Reading ${files.length} file(s)...`);
+
+    try {
+      const fileArray = Array.from(files) as File[];
+      const processedFiles: { data: string, name: string, mimeType: string }[] = [];
+
+      for (const file of fileArray) {
+        const rawData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve((reader.result as string) || '');
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+
+        const data = await compressImageIfNeeded(rawData);
+
+        let fileType = file.type;
+        if (!fileType || fileType === 'application/octet-stream') {
+          if (file.name.toLowerCase().endsWith('.pdf') || data.startsWith('data:application/pdf')) {
+            fileType = 'application/pdf';
+          } else if (file.name.toLowerCase().endsWith('.txt') || data.startsWith('data:text/plain')) {
+            fileType = 'text/plain';
+          } else {
+            fileType = 'image/jpeg';
+          }
+        }
+        processedFiles.push({ data, name: file.name, mimeType: fileType });
+      }
+      
+      setScanProgress(30);
+      setScanStatus(`AI analyzing ${files.length} document(s)...`);
+      
+      // Simulate progress
+      const interval = setInterval(() => {
+        setScanProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(interval);
+            return 90;
+          }
+          return prev + 5;
+        });
+      }, 500);
+
+      const result = await extractMedicalData(processedFiles, appLanguage);
+      const extractedData = result?.extracted_data;
+        
+      clearInterval(interval);
+      setScanProgress(100);
+      setScanStatus("Analysis complete!");
+
+      if (extractedData) {
+        setFormData((prev: any) => ({
+          ...prev,
+          // Overwrite specific fields as requested
+          examName: extractedData.title || prev.examName,
+          category: extractedData.category || prev.category,
+          // Ensure date is in correct format for input
+          date: extractedData.date ? new Date(extractedData.date).toISOString().split('T')[0] : prev.date,
+          // Status mapping
+          status: extractedData.status === 'ALERT' ? 'Attention Required' : (extractedData.status || prev.status),
+          // Provider/Doctor
+          provider: extractedData.doctor_name || prev.provider,
+          doctorName: extractedData.doctor_name || prev.doctorName,
+          specialty: extractedData.specialty || prev.specialty,
+          // Exam category
+          examCategory: extractedData.exam_category || prev.examCategory,
+          // Results
+          results: extractedData.results || prev.results,
+          // Prescriptions
+          prescriptions: extractedData.prescriptions?.map((p: any) => ({
+            ...p,
+            id: Math.random().toString(36).substr(2, 9),
+            prescribingDoctor: extractedData.doctor_name || 'AI Smart Scan'
+          })) || prev.prescriptions,
+          // Metabolic impact
+          metabolicAdjustment: extractedData.metabolic_impact || prev.metabolicAdjustment,
+          // Certificate Info
+          certificateInfo: extractedData.certificate_info ? {
+            institution: extractedData.certificate_info.institution,
+            patientName: extractedData.certificate_info.patient_name,
+            isPatientConfirmed: extractedData.certificate_info.is_patient_confirmed,
+            cid: extractedData.certificate_info.cid,
+            diagnosis: extractedData.certificate_info.diagnosis,
+            leavePeriod: extractedData.certificate_info.leave_period ? {
+              value: extractedData.certificate_info.leave_period.value,
+              unit: extractedData.certificate_info.leave_period.unit,
+              startDate: extractedData.certificate_info.leave_period.start_date,
+              endDate: extractedData.certificate_info.leave_period.end_date,
+            } : undefined,
+            doctorCRM: extractedData.doctor_crm,
+            doctorName: extractedData.doctor_name
+          } : prev.certificateInfo,
+          // Add the files to the list
+          files: [...(prev.files || []), ...processedFiles.map(f => ({
+            id: Math.random().toString(36).substr(2, 9),
+            name: f.name,
+            type: f.mimeType.includes('pdf') ? 'pdf' : 'image',
+            url: f.data
+          }))]
+        }));
+      }
+
+      setTimeout(() => {
+        setIsScanning(false);
+        setScanProgress(0);
+        setScanStatus("");
+      }, 1000);
+    } catch (error) {
+      console.error("Scanning failed:", error);
+      setIsScanning(false);
+      setScanProgress(0);
+      setScanStatus("Error scanning document");
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -291,7 +411,6 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
       fullRecord = {
         ...fullRecord,
         doctorName: formData.doctorName || '',
-        professionalType: formData.professionalType || 'General Practitioner',
         specialty: formData.specialty === 'Other Specialty' ? formData.customSpecialty : formData.specialty,
         location: formData.location,
         reason: formData.reason || '',
@@ -329,31 +448,39 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
         conditionCategory: formData.conditionCategory || '',
         status: formData.status || 'Active',
       };
-    } else if (category === 'Medical Certificates') {
-      fullRecord = {
-        ...fullRecord,
-        doctorName: formData.doctorName || '',
-        date: new Date(formData.date).toISOString(),
-        duration: formData.duration || '',
-        reason: formData.reason || '',
-        notes: formData.notes_text ? [{
-          id: Math.random().toString(36).substr(2, 9),
-          date: new Date().toISOString(),
-          text: formData.notes_text
-        }] : []
-      };
     } else if (category === 'Stress Reports') {
       fullRecord = {
         ...fullRecord,
         stressLevel: formData.stressLevel,
-        source: formData.source,
-        stressNotes: formData.stressNotes,
         mood: formData.mood,
         sleepQuality: formData.sleepQuality,
         triggers: formData.triggers,
         physicalSymptoms: formData.physicalSymptoms,
-        transcription: formData.transcription,
-        voiceUrl: formData.voiceUrl
+      };
+    } else if (category === 'Continuous Medication') {
+      fullRecord = {
+        ...fullRecord,
+        prescriptionDate: new Date(formData.prescriptionDate).toISOString(),
+        validityDate: formData.validityDate ? new Date(formData.validityDate).toISOString() : undefined,
+        type: formData.type,
+        medicationName: formData.medicationName,
+        dosage: formData.dosage,
+        times: formData.times,
+        aiInsights: formData.aiInsights,
+        isActive: formData.isActive,
+      };
+    } else if (category === 'Routine Vitals') {
+      fullRecord = {
+        ...fullRecord,
+        subtype: formData.subtype,
+        bloodPressure: formData.subtype === 'Blood Pressure' ? formData.bloodPressure : undefined,
+        glucose: formData.subtype === 'Glucose' ? formData.glucose : undefined,
+        other: formData.subtype === 'Other' ? formData.other : undefined,
+      };
+    } else if (category === 'Medical Certificate') {
+      fullRecord = {
+        ...fullRecord,
+        certificateInfo: formData.certificateInfo,
       };
     }
 
@@ -472,114 +599,8 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
     setFormData({ ...formData, conditions: newList });
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setExtractionProgress({ step: 'uploading', message: 'Uploading file...', progress: 25 });
-
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64String = reader.result as string;
-      const newFile = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: file.name,
-        type: file.type.startsWith('image') ? 'image' : 'pdf',
-        url: base64String,
-        date: new Date().toISOString()
-      };
-      
-      setFormData(prev => ({
-        ...prev,
-        files: [...(prev.files || []), newFile]
-      }));
-
-      // Trigger AI Extraction
-      try {
-        setExtractionProgress({ step: 'reading', message: 'Reading document...', progress: 50 });
-        
-        if (category === 'Exams') {
-          setExtractionProgress({ step: 'extracting', message: 'Extracting medical data...', progress: 75 });
-          const extracted = await extractExamData(base64String, file.type);
-          setFormData(prev => ({
-            ...prev,
-            ...extracted,
-            results: [...(prev.results || []), ...(extracted.results || [])]
-          }));
-        } else if (category === 'Consultations') {
-          setExtractionProgress({ step: 'extracting', message: 'Analyzing medical report...', progress: 75 });
-          const notes = await extractReportData(base64String, file.type);
-          setFormData(prev => ({
-            ...prev,
-            medicalReportNotes: (prev.medicalReportNotes ? prev.medicalReportNotes + '\n\n' : '') + notes
-          }));
-        } else if (category === 'Medical Certificates') {
-          setExtractionProgress({ step: 'extracting', message: 'Extracting certificate details...', progress: 75 });
-          const extracted = await extractCertificateData(base64String, file.type);
-          setFormData(prev => ({
-            ...prev,
-            ...extracted,
-            date: extracted.date ? extracted.date.split('T')[0] : prev.date
-          }));
-        }
-
-        setExtractionProgress({ step: 'saving', message: 'Saving structured data...', progress: 100 });
-        setTimeout(() => setExtractionProgress({ step: 'idle', message: '', progress: 0 }), 1000);
-      } catch (error) {
-        console.error('AI Extraction failed:', error);
-        setExtractionProgress({ step: 'error', message: 'AI Extraction failed. Please enter data manually.', progress: 100 });
-        setTimeout(() => setExtractionProgress({ step: 'idle', message: '', progress: 0 }), 3000);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
   const renderFields = () => {
     switch (category) {
-      case 'Medical Certificates':
-        return (
-          <>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Doctor Name</label>
-              <input 
-                required
-                className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
-                placeholder="e.g. Dr. Silva"
-                value={formData.doctorName || ''}
-                onChange={e => setFormData({...formData, doctorName: e.target.value})}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Duration</label>
-              <input 
-                required
-                className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
-                placeholder="e.g. 3 days, 1 week"
-                value={formData.duration || ''}
-                onChange={e => setFormData({...formData, duration: e.target.value})}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Reason</label>
-              <input 
-                required
-                className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
-                placeholder="Reason or CID code"
-                value={formData.reason || ''}
-                onChange={e => setFormData({...formData, reason: e.target.value})}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Notes</label>
-              <textarea 
-                className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all min-h-[100px]"
-                placeholder="Additional details..."
-                value={formData.notes_text || ''}
-                onChange={e => setFormData({...formData, notes_text: e.target.value})}
-              />
-            </div>
-          </>
-        );
       case 'Exams':
         return (
           <>
@@ -751,19 +772,6 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Professional Type</label>
-              <select 
-                className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all appearance-none"
-                value={formData.professionalType || 'General Practitioner'}
-                onChange={e => setFormData({...formData, professionalType: e.target.value})}
-              >
-                {PROFESSIONAL_TYPES.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Specialty</label>
               <select 
                 className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all appearance-none"
@@ -832,60 +840,6 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
                 value={formData.reason || ''}
                 onChange={e => setFormData({...formData, reason: e.target.value})}
               />
-            </div>
-
-            <div className="space-y-4 p-4 bg-primary/5 rounded-3xl border border-primary/10">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="size-4 text-primary" />
-                <label className="text-[10px] font-bold text-primary uppercase tracking-widest">Medical Report Notes (AI Generated)</label>
-              </div>
-              <textarea 
-                className="w-full bg-white dark:bg-slate-900 border-none rounded-2xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20 min-h-[120px]"
-                placeholder="AI will generate notes from uploaded reports..."
-                value={formData.medicalReportNotes || ''}
-                onChange={e => setFormData({...formData, medicalReportNotes: e.target.value})}
-              />
-            </div>
-
-            <div className="space-y-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-slate-100 dark:border-slate-800">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">Medical Certificate</label>
-                <button 
-                  type="button"
-                  onClick={() => setFormData({...formData, hasMedicalCertificate: !formData.hasMedicalCertificate})}
-                  className={cn(
-                    "text-[10px] font-bold px-3 py-1 rounded-full transition-all",
-                    formData.hasMedicalCertificate ? "bg-primary text-white" : "bg-slate-200 text-slate-500"
-                  )}
-                >
-                  {formData.hasMedicalCertificate ? 'Included' : 'Add Certificate'}
-                </button>
-              </div>
-              
-              {formData.hasMedicalCertificate && (
-                <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Duration</label>
-                      <input 
-                        className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
-                        placeholder="e.g. 3 days"
-                        value={formData.medicalCertificate?.duration || ''}
-                        onChange={e => setFormData({...formData, medicalCertificate: {...(formData.medicalCertificate || {}), duration: e.target.value}})}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Reason</label>
-                      <input 
-                        className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
-                        placeholder="CID or reason"
-                        value={formData.medicalCertificate?.reason || ''}
-                        onChange={e => setFormData({...formData, medicalCertificate: {...(formData.medicalCertificate || {}), reason: e.target.value}})}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -1019,6 +973,52 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
                         setFormData({...formData, prescriptions: newP});
                       }}
                     />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Files & Documents</label>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, files: [...(formData.files || []), { id: Date.now().toString(), name: '', type: 'pdf', url: '#' }]})}
+                  className="text-xs font-bold text-primary flex items-center gap-1"
+                >
+                  <Plus className="size-3" /> Attach File
+                </button>
+              </div>
+              <div className="space-y-2">
+                {formData.files?.map((f: any, idx: number) => (
+                  <div key={f.id} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <FileText className="size-4 text-slate-400" />
+                    <input 
+                      className="flex-1 bg-transparent border-none p-0 text-xs focus:ring-0"
+                      placeholder="File name (e.g. Prescription.pdf)"
+                      value={f.name}
+                      onChange={e => {
+                        const newF = [...formData.files];
+                        newF[idx].name = e.target.value;
+                        setFormData({...formData, files: newF});
+                      }}
+                    />
+                    <select 
+                      className="bg-transparent border-none p-0 text-[10px] font-bold text-primary focus:ring-0"
+                      value={f.type}
+                      onChange={e => {
+                        const newF = [...formData.files];
+                        newF[idx].type = e.target.value;
+                        setFormData({...formData, files: newF});
+                      }}
+                    >
+                      <option value="pdf">PDF</option>
+                      <option value="image">Image</option>
+                      <option value="document">Doc</option>
+                    </select>
+                    <button type="button" onClick={() => setFormData({...formData, files: formData.files.filter((_: any, i: number) => i !== idx)})} className="text-red-400 p-1">
+                      <Trash2 className="size-4" />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1362,21 +1362,11 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
                           value={cond.category}
                           onChange={e => updateFamilyCondition(idx, 'category', e.target.value)}
                         >
-                          {FAMILY_HISTORY_CATEGORIES.map(c => (
+                          {['Cardiovascular', 'Metabolic', 'Oncology', 'Neurological', 'Respiratory', 'Autoimmune', 'Mental Health', 'Other'].map(c => (
                             <option key={c} value={c}>{c}</option>
                           ))}
                         </select>
                       </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Notes & Details</label>
-                      <textarea 
-                        className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20 min-h-[80px]"
-                        placeholder="Add specific details about this condition..."
-                        value={cond.notes || ''}
-                        onChange={e => updateFamilyCondition(idx, 'notes', e.target.value)}
-                      />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -1420,6 +1410,123 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
             </div>
           </div>
         );
+      case 'Medical Certificate':
+        return (
+          <div className="space-y-8">
+            <div className="bg-primary/5 dark:bg-primary/10 p-6 rounded-3xl border border-primary/10 space-y-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-primary/20 rounded-xl">
+                  <FileText className="size-5 text-primary" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold">Certificate Details</h4>
+                  <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Extracted from document</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Institution</label>
+                  <input 
+                    className="w-full bg-white dark:bg-slate-900 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                    placeholder="e.g. Hospital Santa Luzia"
+                    value={formData.certificateInfo?.institution || ''}
+                    onChange={e => setFormData({
+                      ...formData, 
+                      certificateInfo: { ...formData.certificateInfo, institution: e.target.value }
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Patient Name</label>
+                  <div className="relative">
+                    <input 
+                      className={cn(
+                        "w-full bg-white dark:bg-slate-900 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all",
+                        formData.certificateInfo?.isPatientConfirmed ? "pr-12" : ""
+                      )}
+                      placeholder="e.g. Jean Pierre"
+                      value={formData.certificateInfo?.patientName || ''}
+                      onChange={e => setFormData({
+                        ...formData, 
+                        certificateInfo: { ...formData.certificateInfo, patientName: e.target.value }
+                      })}
+                    />
+                    {formData.certificateInfo?.isPatientConfirmed && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-green-500">
+                        <CheckCircle2 className="size-5" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">CID / Diagnosis</label>
+                  <input 
+                    className="w-full bg-white dark:bg-slate-900 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                    placeholder="e.g. Z00.0"
+                    value={formData.certificateInfo?.cid || ''}
+                    onChange={e => setFormData({
+                      ...formData, 
+                      certificateInfo: { ...formData.certificateInfo, cid: e.target.value }
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Doctor CRM</label>
+                  <input 
+                    className="w-full bg-white dark:bg-slate-900 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                    placeholder="e.g. 12345-SP"
+                    value={formData.certificateInfo?.doctorCRM || ''}
+                    onChange={e => setFormData({
+                      ...formData, 
+                      certificateInfo: { ...formData.certificateInfo, doctorCRM: e.target.value }
+                    })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-4 border-t border-primary/10">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Leave Period</label>
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Duration</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="number"
+                        className="w-20 bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
+                        value={formData.certificateInfo?.leavePeriod?.value || ''}
+                        onChange={e => setFormData({
+                          ...formData, 
+                          certificateInfo: { 
+                            ...formData.certificateInfo, 
+                            leavePeriod: { ...formData.certificateInfo?.leavePeriod, value: parseInt(e.target.value) } 
+                          }
+                        })}
+                      />
+                      <select 
+                        className="flex-1 bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20 appearance-none"
+                        value={formData.certificateInfo?.leavePeriod?.unit || 'days'}
+                        onChange={e => setFormData({
+                          ...formData, 
+                          certificateInfo: { 
+                            ...formData.certificateInfo, 
+                            leavePeriod: { ...formData.certificateInfo?.leavePeriod, unit: e.target.value as 'days' | 'hours' } 
+                          }
+                        })}
+                      >
+                        <option value="days">Days</option>
+                        <option value="hours">Hours</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
       case 'Stress Reports':
         return (
           <div className="space-y-6">
@@ -1443,27 +1550,6 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
                 onChange={(e) => setFormData({...formData, stressLevel: parseInt(e.target.value)})}
                 className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full appearance-none accent-primary"
               />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Source of Stress</label>
-              <div className="grid grid-cols-3 gap-2">
-                {STRESS_SOURCES.map(source => (
-                  <button
-                    key={source}
-                    type="button"
-                    onClick={() => setFormData({...formData, source})}
-                    className={cn(
-                      "py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
-                      formData.source === source 
-                        ? "bg-primary border-primary text-white" 
-                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500"
-                    )}
-                  >
-                    {source}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1491,34 +1577,6 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
                   ))}
                 </select>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-4">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Notes & Voice Recording</label>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    // This would be implemented with actual recording logic
-                    alert("Voice recording feature: Start/Stop recording and AI will transcribe it into the notes field.");
-                  }}
-                  className="p-2 rounded-full bg-primary/10 text-primary"
-                >
-                  <Phone className="size-4" />
-                </button>
-              </div>
-              <textarea 
-                className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 min-h-[120px]"
-                placeholder="Describe how you're feeling or what's on your mind..."
-                value={formData.stressNotes || ''}
-                onChange={e => setFormData({...formData, stressNotes: e.target.value})}
-              />
-              {formData.transcription && (
-                <div className="mt-2 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                  <span className="text-[8px] font-bold text-indigo-500 uppercase tracking-widest block mb-1">AI Transcription</span>
-                  <p className="text-xs italic text-slate-600 dark:text-slate-400">"{formData.transcription}"</p>
-                </div>
-              )}
             </div>
 
             <div className="space-y-3">
@@ -1614,6 +1672,246 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
             </div>
           </>
         );
+      case 'Continuous Medication':
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Prescription Date</label>
+                <input 
+                  type="date"
+                  required
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                  value={formData.prescriptionDate}
+                  onChange={e => setFormData({...formData, prescriptionDate: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Validity (Optional)</label>
+                <input 
+                  type="date"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                  value={formData.validityDate}
+                  onChange={e => setFormData({...formData, validityDate: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Type</label>
+              <div className="grid grid-cols-2 gap-2">
+                {['Remédio', 'Procedimento'].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setFormData({...formData, type: t})}
+                    className={cn(
+                      "py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
+                      formData.type === t 
+                        ? "bg-primary border-primary text-white" 
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500"
+                    )}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Medication Name</label>
+              <input 
+                required
+                className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                placeholder="e.g. Metformin"
+                value={formData.medicationName}
+                onChange={e => setFormData({...formData, medicationName: e.target.value})}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Dosage</label>
+              <input 
+                required
+                className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-primary/20 transition-all"
+                placeholder="e.g. 500mg"
+                value={formData.dosage}
+                onChange={e => setFormData({...formData, dosage: e.target.value})}
+              />
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Schedule (Times)</label>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({...formData, times: [...formData.times, '12:00']})}
+                  className="text-[10px] font-bold text-primary flex items-center gap-1"
+                >
+                  <Plus className="size-3" /> Add Time
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {formData.times.map((time: string, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-xl">
+                    <Clock className="size-3 text-slate-400" />
+                    <input 
+                      type="time"
+                      className="bg-transparent border-none p-0 text-xs font-bold focus:ring-0"
+                      value={time}
+                      onChange={e => {
+                        const newTimes = [...formData.times];
+                        newTimes[idx] = e.target.value;
+                        setFormData({...formData, times: newTimes});
+                      }}
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setFormData({...formData, times: formData.times.filter((_: any, i: number) => i !== idx)})}
+                      className="text-red-400"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+              {formData.aiInsights && (
+                <div className="mt-4 p-4 bg-indigo-50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShieldAlert className="size-3 text-indigo-500" />
+                    <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">Cuidados e Observações (IA)</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap">
+                    {formData.aiInsights}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      case 'Routine Vitals':
+        return (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Vitals Subtype</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['Blood Pressure', 'Glucose', 'Other'].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setFormData({...formData, subtype: s})}
+                    className={cn(
+                      "py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border",
+                      formData.subtype === s 
+                        ? "bg-primary border-primary text-white" 
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500"
+                    )}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {formData.subtype === 'Blood Pressure' && (
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Systolic (mmHg)</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
+                      placeholder="120"
+                      value={formData.bloodPressure.systolic}
+                      onChange={e => setFormData({...formData, bloodPressure: {...formData.bloodPressure, systolic: parseInt(e.target.value)}})}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Diastolic (mmHg)</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
+                      placeholder="80"
+                      value={formData.bloodPressure.diastolic}
+                      onChange={e => setFormData({...formData, bloodPressure: {...formData.bloodPressure, diastolic: parseInt(e.target.value)}})}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Pulse (bpm)</label>
+                  <input 
+                    type="number"
+                    className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
+                    placeholder="70"
+                    value={formData.bloodPressure.pulse}
+                    onChange={e => setFormData({...formData, bloodPressure: {...formData.bloodPressure, pulse: parseInt(e.target.value)}})}
+                  />
+                </div>
+              </div>
+            )}
+
+            {formData.subtype === 'Glucose' && (
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Glucose Value (mg/dL)</label>
+                  <input 
+                    type="number"
+                    className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
+                    placeholder="90"
+                    value={formData.glucose.value}
+                    onChange={e => setFormData({...formData, glucose: {...formData.glucose, value: parseInt(e.target.value)}})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">State</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['Jejum', 'Pré-prandial', 'Pós-prandial'].map((state) => (
+                      <button
+                        key={state}
+                        type="button"
+                        onClick={() => setFormData({...formData, glucose: {...formData.glucose, state}})}
+                        className={cn(
+                          "py-2 rounded-lg text-[8px] font-bold uppercase transition-all border",
+                          formData.glucose.state === state 
+                            ? "bg-primary border-primary text-white" 
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500"
+                        )}
+                      >
+                        {state}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {formData.subtype === 'Other' && (
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Metric Name</label>
+                  <input 
+                    className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
+                    placeholder="e.g. Oxygen Saturation"
+                    value={formData.other.metric}
+                    onChange={e => setFormData({...formData, other: {...formData.other, metric: e.target.value}})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-bold text-slate-400 uppercase ml-2">Value</label>
+                  <input 
+                    className="w-full bg-white dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-xs focus:ring-1 focus:ring-primary/20"
+                    placeholder="e.g. 98%"
+                    value={formData.other.value}
+                    onChange={e => setFormData({...formData, other: {...formData.other, value: e.target.value}})}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        );
       default:
         return null;
     }
@@ -1621,54 +1919,62 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <AnimatePresence>
-        {extractionProgress.step !== 'idle' && (
-          <motion.div 
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="bg-primary/10 rounded-2xl p-4 overflow-hidden"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                {extractionProgress.step === 'error' ? (
-                  <AlertCircle className="size-4 text-red-500" />
-                ) : (
-                  <Loader2 className="size-4 text-primary animate-spin" />
-                )}
-                <span className={cn(
-                  "text-xs font-bold uppercase tracking-wider",
-                  extractionProgress.step === 'error' ? "text-red-500" : "text-primary"
-                )}>
-                  {extractionProgress.message}
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-primary">{extractionProgress.progress}%</span>
-            </div>
-            <div className="h-1.5 w-full bg-white dark:bg-slate-800 rounded-full overflow-hidden">
-              <motion.div 
-                className={cn(
-                  "h-full transition-all duration-500",
-                  extractionProgress.step === 'error' ? "bg-red-500" : "bg-primary"
-                )}
-                initial={{ width: 0 }}
-                animate={{ width: `${extractionProgress.progress}%` }}
-              />
-            </div>
-            <div className="flex justify-between mt-2">
-              {['uploading', 'reading', 'extracting', 'saving'].map((s, i) => (
-                <div key={s} className="flex flex-col items-center gap-1">
-                  <div className={cn(
-                    "size-2 rounded-full",
-                    extractionProgress.progress >= (i + 1) * 25 ? "bg-primary" : "bg-slate-200 dark:bg-slate-700"
-                  )} />
-                  <span className="text-[8px] font-bold text-slate-400 uppercase">{s}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* AI Scan Section */}
+      <div className="bg-primary/5 rounded-3xl p-6 border border-primary/10 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-xl">
+            <Sparkles className="size-5 text-primary" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold">AI Smart Scan</h4>
+            <p className="text-[10px] text-slate-500 font-medium">Anexe exames em PDF, fotos ou receitas para preencher</p>
+          </div>
+        </div>
+        
+        <input 
+          type="file" 
+          ref={fileInputRef}
+          onChange={handleFileScan}
+          accept="image/*,application/pdf,.pdf,text/plain,.txt,.doc,.docx"
+          className="hidden"
+          multiple
+        />
+        
+        <button
+          type="button"
+          onClick={handleScanClick}
+          disabled={isScanning}
+          className="w-full py-3 bg-primary text-white rounded-2xl text-xs font-bold flex flex-col items-center justify-center gap-2 hover:bg-primary/90 transition-all disabled:opacity-50 overflow-hidden relative"
+        >
+          {isScanning && (
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${scanProgress}%` }}
+              className="absolute bottom-0 left-0 h-1 bg-white/30"
+            />
+          )}
+          
+          <div className="flex items-center gap-2">
+            {isScanning ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                {scanStatus || "Scanning Document..."}
+              </>
+            ) : (
+              <>
+                <Upload className="size-4" />
+                Scan & Auto-fill
+              </>
+            )}
+          </div>
+          
+          {isScanning && (
+            <span className="text-[8px] opacity-70 uppercase tracking-widest">
+              AI Processing: {scanProgress}%
+            </span>
+          )}
+        </button>
+      </div>
 
       <div className="space-y-2">
         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Date</label>
@@ -1685,60 +1991,6 @@ export default function HistoryForm({ category, initialData, onComplete, onCance
       </div>
 
       {renderFields()}
-
-      {/* Common Files Section */}
-      <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-        <div className="flex items-center justify-between">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4">Files & Documents</label>
-          <button 
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="text-xs font-bold text-primary flex items-center gap-1"
-          >
-            <Paperclip className="size-3" /> Attach File
-          </button>
-          <input 
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            onChange={handleFileChange}
-            accept="image/*,.pdf,.doc,.docx"
-          />
-        </div>
-        <div className="space-y-2">
-          {formData.files?.map((f: any, idx: number) => (
-            <div key={f.id} className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-              <FileText className="size-4 text-slate-400" />
-              <input 
-                className="flex-1 bg-transparent border-none p-0 text-xs focus:ring-0"
-                placeholder="File name (e.g. Prescription.pdf)"
-                value={f.name}
-                onChange={e => {
-                  const newF = [...formData.files];
-                  newF[idx].name = e.target.value;
-                  setFormData({...formData, files: newF});
-                }}
-              />
-              <select 
-                className="bg-transparent border-none p-0 text-[10px] font-bold text-primary focus:ring-0"
-                value={f.type}
-                onChange={e => {
-                  const newF = [...formData.files];
-                  newF[idx].type = e.target.value;
-                  setFormData({...formData, files: newF});
-                }}
-              >
-                <option value="pdf">PDF</option>
-                <option value="image">Image</option>
-                <option value="document">Doc</option>
-              </select>
-              <button type="button" onClick={() => setFormData({...formData, files: formData.files.filter((_: any, i: number) => i !== idx)})} className="text-red-400 p-1">
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
 
       <div className="flex gap-3 pt-4">
         <button 

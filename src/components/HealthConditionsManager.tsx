@@ -7,7 +7,7 @@ import { SelectedCondition } from '../types';
 import { cn } from '../lib/utils';
 
 export default function HealthConditionsManager() {
-  const { profile, updateProfile, addHistoryRecord } = useHealth();
+  const { profile, updateProfile, t } = useHealth();
   const [isAdding, setIsAdding] = useState(false);
   const [step, setStep] = useState<'category' | 'condition' | 'details'>('category');
   const [selectedCategory, setSelectedCategory] = useState<HealthCategory | null>(null);
@@ -57,17 +57,6 @@ export default function HealthConditionsManager() {
     updateProfile({
       selectedConditions: [...selectedConditions, newCondition]
     });
-
-    // Also add to history records so it appears in the feed
-    addHistoryRecord({
-      category: 'Medical History',
-      conditionName: newCondition.condition,
-      conditionCategory: newCondition.category,
-      status: newCondition.status,
-      date: new Date().toISOString(),
-      notes: newCondition.notes ? [{ id: Math.random().toString(36).substr(2, 9), date: new Date().toISOString(), text: newCondition.notes }] : []
-    });
-
     setIsAdding(false);
   };
 
@@ -80,13 +69,13 @@ export default function HealthConditionsManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between px-1">
-        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Medical History</h3>
+        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">{t('medical.historyTitle')}</h3>
         <button 
           onClick={handleAdd}
           className="text-xs text-primary font-bold flex items-center gap-1"
         >
           <Plus className="size-3" />
-          Add
+          {t('medical.addCondition')}
         </button>
       </div>
 
@@ -278,7 +267,7 @@ export default function HealthConditionsManager() {
                                 : "bg-slate-50 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400"
                             )}
                           >
-                            {s}
+                            {t(`medical.status.${s.toLowerCase()}`)}
                           </button>
                         ))}
                       </div>
@@ -397,7 +386,7 @@ export default function HealthConditionsManager() {
                     onClick={handleSave}
                     className="w-full py-4 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-primary/20"
                   >
-                    Save Condition
+                    {t('medical.saveCondition')}
                   </button>
                 </div>
               )}

@@ -15,10 +15,17 @@ import Onboarding from './components/Onboarding';
 import WaterTracking from './components/WaterTracking';
 import Login from './components/Login';
 import { HealthProvider, useHealth } from './context/HealthContext';
+import { telemetryService } from './services/telemetryService';
 
 function AppRoutes() {
-  const { profile } = useHealth();
+  const { profile, historyRecords, meals, waterLogs, activities } = useHealth();
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('health_login') === 'true');
+
+  React.useEffect(() => {
+    if (isLoggedIn && profile.onboardingCompleted) {
+      telemetryService.checkAndSync(profile, historyRecords, meals, waterLogs, activities);
+    }
+  }, [isLoggedIn, profile, historyRecords, meals, waterLogs, activities]);
 
   if (!isLoggedIn) {
     return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;

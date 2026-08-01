@@ -116,7 +116,7 @@ export default function MetricDetail() {
       </section>
 
       {/* FAB */}
-      {metricType !== 'healthScore' && (
+      {metricType !== 'healthScore' && metricType !== 'steps' && (
         <button 
           onClick={() => setIsModalOpen(true)}
           className={cn("fixed right-6 bottom-24 size-14 text-white rounded-full shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform z-30", config.color)}

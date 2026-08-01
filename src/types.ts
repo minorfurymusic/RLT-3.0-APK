@@ -16,6 +16,9 @@ export interface CalendarEvent {
   time: string;
   type: 'medical' | 'exam' | 'medication' | 'workout' | 'nutrition';
   synced?: boolean;
+  linkedId?: string; // ID of the routine or medical record
+  status?: 'taken' | 'missed' | 'pending';
+  googleEventId?: string;
 }
 
 export interface UserProfile {
@@ -33,14 +36,47 @@ export interface UserProfile {
   ethnicity?: string;
   address?: string;
   bodyFatPercentage?: number;
+  leanBodyMass?: number;
   waistCircumference?: number;
   workActivityType?: 'Sedentary' | 'Active' | 'Very Active';
+  occupation?: string;
   preferredTrainingTime?: string;
   foodRestrictions?: string;
   foodPreference?: 'Vegetarian' | 'Balanced' | 'Low Carb' | string;
   stimulantConsumption?: string;
   sleepQuality?: string;
   mentalHealthHistory?: MentalHealthResponse[];
+  medications?: string[];
+  units: 'metric' | 'imperial';
+  goal?: 'Muscle Gain' | 'Weight Loss' | 'Maintenance' | 'Health';
+  biometricEnabled?: boolean;
+  language?: string;
+}
+
+export interface RadarChartAxes {
+  strength: number;
+  nutrition: number;
+  vitality: number;
+  focus: number;
+  conditioning: number;
+}
+
+export interface AIBiofeedbackReport {
+  diagnosis: string;
+  medicalAlerts: string[];
+  practicalSuggestions: string[];
+  predictiveInsights: string;
+}
+
+export interface PerformanceSnapshot {
+  id: string;
+  date: string; // ISO string
+  radarData: RadarChartAxes;
+  aiReport: AIBiofeedbackReport;
+  timestamp?: string;
+  weight?: number;
+  bf?: number;
+  circadianWindow?: 'Madrugada' | 'Manhã' | 'Tarde' | 'Noite';
 }
 
 export interface SelectedCondition {
@@ -74,7 +110,7 @@ export interface HealthGoal {
 
 export interface HealthRecord {
   id: string;
-  metric: 'calories' | 'protein' | 'hydration' | 'steps' | 'healthScore';
+  metric: 'calories' | 'protein' | 'hydration' | 'steps' | 'healthScore' | 'burned_calories' | 'net_calories';
   value: number;
   date: string; // ISO string
 }
@@ -97,12 +133,36 @@ export interface AgendaItem {
   type: 'medication' | 'appointment' | 'exercise';
 }
 
-export type HistoryCategory = 'Medical History' | 'Exams' | 'Consultations' | 'Emergency' | 'Family History' | 'Stress Reports' | 'Medical Certificates';
+export interface AdherenceLog {
+  id: string; // medicationId + date + time
+  medicationId: string;
+  date: string; // YYYY-MM-DD
+  time: string;
+  status: 'taken' | 'missed' | 'pending';
+}
+
+export type HistoryCategory = 'Medical History' | 'Exams' | 'Consultations' | 'Emergency' | 'Family History' | 'Stress Reports' | 'Continuous Medication' | 'Routine Vitals' | 'Medical Certificate';
 
 export interface Note {
   id: string;
   date: string; // ISO string
   text: string;
+}
+
+export interface CertificateInfo {
+  institution: string;
+  patientName: string;
+  isPatientConfirmed: boolean;
+  cid?: string;
+  diagnosis?: string;
+  leavePeriod?: {
+    value: number;
+    unit: 'hours' | 'days';
+    startDate: string;
+    endDate: string;
+  };
+  doctorCRM?: string;
+  doctorName?: string;
 }
 
 export interface BaseHistoryRecord {
@@ -112,6 +172,10 @@ export interface BaseHistoryRecord {
   notes?: Note[];
   attachmentUrl?: string;
   files?: AttachedFile[];
+  metabolicAdjustment?: boolean;
+  criticalMarkers?: string[];
+  priority?: boolean;
+  certificateInfo?: CertificateInfo;
 }
 
 export interface MedicalHistoryRecord extends BaseHistoryRecord {
@@ -147,8 +211,6 @@ export interface BiomarkerResult {
   unit: string;
   referenceRange?: string;
   status?: ExamStatus;
-  method?: string;
-  material?: string;
 }
 
 export interface ExamRecord extends BaseHistoryRecord {
@@ -161,8 +223,6 @@ export interface ExamRecord extends BaseHistoryRecord {
   results: BiomarkerResult[];
   attachmentType?: 'pdf' | 'image';
   bodyRegion?: string; // For imaging exams
-  methodUsed?: string;
-  materialUsed?: string;
 }
 
 export type ConsultationStatus = 'Scheduled' | 'Completed' | 'Canceled';
@@ -196,7 +256,6 @@ export interface ConsultationRecord extends BaseHistoryRecord {
   category: 'Consultations';
   doctorName: string;
   specialty: string;
-  professionalType?: ProfessionalType;
   location: string; // clinic / hospital / online
   reason: string;
   status: ConsultationStatus;
@@ -204,33 +263,6 @@ export interface ConsultationRecord extends BaseHistoryRecord {
   treatmentPlan?: TreatmentPlan;
   followUpDate?: string; // ISO string
   prescriptions?: Prescription[];
-  medicalReportNotes?: string;
-  hasMedicalCertificate?: boolean;
-  medicalCertificate?: MedicalCertificate;
-}
-
-export type ProfessionalType = 
-  | 'Dentist' 
-  | 'Speech Therapist' 
-  | 'Nutritionist' 
-  | 'Psychologist' 
-  | 'Psychiatrist' 
-  | 'Physiotherapist' 
-  | 'Orthopedist' 
-  | 'Cardiologist' 
-  | 'Endocrinologist' 
-  | 'Dermatologist' 
-  | 'Neurologist' 
-  | 'General Practitioner'
-  | 'Other';
-
-export interface MedicalCertificate {
-  doctorName: string;
-  date: string;
-  duration: string;
-  reason: string;
-  notes: string;
-  file?: AttachedFile;
 }
 
 export interface FamilyHistoryCondition {
@@ -293,26 +325,61 @@ export interface StressReportRecord extends BaseHistoryRecord {
   sleepQuality: string;
   triggers: string[];
   physicalSymptoms: string[];
-  source?: 'Work' | 'Traffic' | 'Family' | 'Financial' | 'Health' | 'Other' | 'Others';
-  stressNotes?: string;
   voiceUrl?: string;
-  transcription?: string;
+}
+
+export interface ContinuousMedicationRecord extends BaseHistoryRecord {
+  category: 'Continuous Medication';
+  prescriptionDate: string;
+  validityDate?: string;
+  type: 'Remédio' | 'Procedimento';
+  medicationName: string;
+  dosage: string;
+  times: string[];
+  aiInsights?: string;
+  isActive: boolean;
+  endDate?: string;
+}
+
+export type VitalSubtype = 'Blood Pressure' | 'Glucose' | 'Other';
+
+export interface RoutineVitalsRecord extends BaseHistoryRecord {
+  category: 'Routine Vitals';
+  subtype: VitalSubtype;
+  bloodPressure?: {
+    systolic: number;
+    diastolic: number;
+    pulse: number;
+  };
+  glucose?: {
+    value: number;
+    state: 'Jejum' | 'Pré-prandial' | 'Pós-prandial';
+  };
+  other?: {
+    metric: string;
+    value: string;
+  };
 }
 
 export interface MedicalCertificateRecord extends BaseHistoryRecord {
-  category: 'Medical Certificates';
-  doctorName: string;
-  duration: string;
-  reason: string;
+  category: 'Medical Certificate';
 }
 
-export type HistoryRecord = MedicalHistoryRecord | ExamRecord | ConsultationRecord | EmergencyRecord | FamilyHistoryRecord | StressReportRecord | MedicalCertificateRecord;
+export type HistoryRecord = 
+  | MedicalHistoryRecord 
+  | ExamRecord 
+  | ConsultationRecord 
+  | EmergencyRecord 
+  | FamilyHistoryRecord 
+  | StressReportRecord
+  | ContinuousMedicationRecord
+  | RoutineVitalsRecord
+  | MedicalCertificateRecord;
 
 export interface Meal {
   id: string;
-  name?: string;
   description: string;
-  type: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack' | 'Post-workout' | 'Custom';
+  type: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack';
   time: string;
   date: string; // ISO string
   calories: number;
@@ -321,6 +388,7 @@ export interface Meal {
   fat: number;
   portionSize: string;
   imageUrl?: string;
+  mediaExpired?: boolean;
 }
 
 export interface WaterLog {
@@ -348,6 +416,14 @@ export interface ExerciseRoutine {
     sets: GymSet[];
   }[];
   otherActivityName?: string;
+  lastCompletedDate?: string; // ISO date string
+  isExtra?: boolean;
+  skippedDates?: string[]; // Added for OMNI-V22
+  loggedGymExercises?: {
+    name: string;
+    muscle: string;
+    sets: GymSet[];
+  }[];
 }
 
 export type ActivityType = 'walking' | 'running' | 'cycling' | 'gym' | 'other';
@@ -356,13 +432,17 @@ export interface ActivityTracking {
   id: string;
   name?: string;
   type: 'walking' | 'running' | 'cycling' | 'gym' | 'other';
-  startTime: string;
+  status?: 'completed' | 'ongoing' | 'paused';
+  date?: string;
+  startTime?: string;
   endTime?: string;
-  duration: number; // seconds
-  distance: number; // km
-  avgSpeed: number; // km/h
-  calories: number;
-  elevation: number; // m
+  duration?: number; // seconds
+  isPaused?: boolean;
+  routineId?: string;
+  distance?: number; // km
+  avgSpeed?: number; // km/h
+  calories?: number;
+  elevation?: number; // m
 }
 
 export interface GymExercise {
@@ -385,10 +465,26 @@ export interface GymWorkoutLog {
   exerciseName: string;
   muscleGroup: string;
   sets: GymSet[];
-  totalReps: number;
-  weight: number;
-  volume: number;
   caloriesBurned: number;
+  totalVolume?: number;
+}
+
+export interface GymWorkoutSession {
+  id: string;
+  date: string;
+  name: string;
+  exercises: {
+    exerciseId: string;
+    exerciseName: string;
+    muscleGroup: string;
+    sets: GymSet[];
+    caloriesBurned: number;
+    duration: number;
+    totalVolume: number;
+  }[];
+  totalCalories: number;
+  totalDuration: number;
+  totalVolume: number;
 }
 
 export interface ChatMessage {
@@ -407,13 +503,4 @@ export interface MentalHealthResponse {
     answer: number | string;
   }[];
   score: number;
-}
-
-export interface Insight {
-  id: string;
-  title: string;
-  description: string;
-  category: 'Nutrition' | 'Fitness' | 'Health' | 'Mental Well-Being';
-  type: 'insight' | 'suggestion' | 'warning' | 'motivational';
-  date: string;
 }
