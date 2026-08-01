@@ -147,4 +147,36 @@ portabilidade do app para paridade com o C-rebro e o Google Fit/Health Connect.
     de permissão nativo aparece de verdade nem que dados reais chegam
     depois de concedida. Precisa de teste de campo antes de considerar a
     Parte 2.2 do processo.txt completa.
+
+[x] TELA BRANCA AO RODAR O APP SEM .env.local (regressão encontrada e
+    corrigida ao testar de verdade, 01/08/2026, por Claude)
+  - Como foi encontrado: rodei o app de verdade (npm run dev + Chromium
+    headless via Playwright) para tirar um screenshot pro responsável do
+    projeto ver o resultado das correções anteriores — e a tela veio
+    completamente branca.
+  - Causa: a correção da chave do Firebase (item acima) trocou o JSON com
+    a chave real por variáveis de ambiente vazias quando .env.local não
+    existe (que é o caso deste ambiente). `initializeApp`/`getAuth` do
+    Firebase lançam uma exceção SÍNCRONA ("auth/invalid-api-key") no
+    momento em que o módulo é importado — ou seja, antes do React montar.
+    Isso quebrava o bundle inteiro antes mesmo do ErrorBoundary existir na
+    árvore, resultando em página em branco. Pior que o comportamento
+    anterior à minha correção.
+  - Arquivo alterado: src/services/googleCalendarService.ts — inicialização
+    do Firebase agora só roda dentro de um try/catch, condicionada a
+    `isFirebaseConfigured`; `auth` vira `Auth | null`; `initAuth` retorna
+    um no-op quando não configurado; `googleSignIn`/`logoutGoogle` checam
+    `auth` antes de usar e lançam um erro claro e catchável (não mais uma
+    exceção de import) se chamados sem configuração.
+  - Como validado: `npx tsc --noEmit` e `npm run build` limpos. Rodei o
+    app de verdade de novo (mesmo processo acima): a tela de "Permissões
+    do Sistema" e a tela de Login/Welcome agora renderizam normalmente
+    sem .env.local configurado; cliquei em "Sim, Quero Começar Agora" →
+    "Entrar com o Google" e nenhum erro apareceu no console nem a página
+    quebrou (o app simplesmente mostra a tela de login com Google, que
+    falharia de forma tratada — não testada até o fim porque exigiria
+    credenciais reais do Google — se o usuário clicasse em "Entrar").
+    Screenshots tirados confirmam: modal de permissões (com o card de
+    Health Connect adicionado numa correção anterior), tela de boas-vindas
+    RLT, e tela de "Entrar com o Google".
 --------------------------------------------------------------------------------

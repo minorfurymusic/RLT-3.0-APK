@@ -1,5 +1,5 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut, Auth } from 'firebase/auth';
 import { CalendarEvent } from '../types';
 
 // Firebase config comes from build-time env vars (see .env.example), never
@@ -13,21 +13,37 @@ const firebaseConfig = {
   messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '',
 };
 
-const isFirebaseConfigured = !!firebaseConfig.apiKey;
-if (!isFirebaseConfigured) {
-  console.warn('[googleCalendarService] Firebase não configurado (variáveis FIREBASE_* ausentes) — login com Google/sincronização de calendário ficará indisponível até configurar .env.local.');
-}
+export const isFirebaseConfigured = !!firebaseConfig.apiKey;
 
-// Initialize Firebase only if it hasn't been initialized already
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-export const auth = getAuth(app);
-
+// CRÍTICO: initializeApp/getAuth com uma config vazia LANÇA de forma
+// síncrona ("auth/invalid-api-key") no momento em que este módulo é
+// importado — ou seja, ANTES do React montar. Sem o try/catch abaixo, isso
+// derruba o bundle inteiro numa tela branca (confirmado rodando o app sem
+// .env.local configurado: a página nunca chega a renderizar, nem o
+// ErrorBoundary consegue pegar, porque nada da árvore React chegou a
+// existir). Login com Google/sincronização de calendário ficam
+// indisponíveis nesse caso, mas o resto do app continua funcionando.
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
 const provider = new GoogleAuthProvider();
-// Request Google Calendar scopes
 provider.addScope('https://www.googleapis.com/auth/calendar');
 provider.addScope('https://www.googleapis.com/auth/calendar.events');
 
-let isSigningIn = false;
+if (isFirebaseConfigured) {
+  try {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    auth = getAuth(app);
+  } catch (e) {
+    console.error('[googleCalendarService] Falha ao inicializar o Firebase mesmo com config presente:', e);
+    app = null;
+    auth = null;
+  }
+} else {
+  console.warn('[googleCalendarService] Firebase não configurado (variáveis FIREBASE_* ausentes) — login com Google/sincronização de calendário ficará indisponível até configurar .env.local.');
+}
+
+export { auth };
+
 let cachedAccessToken: string | null = null;
 
 // Load cached token from memory
@@ -35,6 +51,7 @@ export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  if (!auth) return () => {}; // no-op unsubscribe quando Firebase não está configurado
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
       if (cachedAccessToken) {
@@ -51,8 +68,10 @@ export const initAuth = (
 };
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+  if (!auth) {
+    throw new Error('Login com Google indisponível: Firebase não está configurado neste build (variáveis FIREBASE_* ausentes).');
+  }
   try {
-    isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
@@ -63,8 +82,6 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   } catch (error: any) {
     console.error('Google sign in error:', error);
     throw error;
-  } finally {
-    isSigningIn = false;
   }
 };
 
@@ -77,7 +94,7 @@ export const setAccessToken = (token: string | null) => {
 };
 
 export const logoutGoogle = async () => {
-  await signOut(auth);
+  if (auth) await signOut(auth);
   cachedAccessToken = null;
 };
 

@@ -478,6 +478,13 @@ decisão do responsável do projeto — nenhum código foi alterado por Claude.
   git para removê-la fisicamente é uma ação destrutiva (force-push) que
   não fiz sem sua confirmação explícita — avise se quiser que eu faça isso
   também.
+  ADENDO (01/08, Claude): ao rodar o app de verdade pra tirar um
+  screenshot, essa correção causou uma REGRESSÃO — tela branca, pior que
+  antes — porque o Firebase lança exceção síncrona no import quando a
+  config está vazia (sem .env.local). Já corrigido: inicialização agora
+  é defensiva (try/catch + checagem de config), o app funciona
+  normalmente sem .env.local, só o login com Google fica indisponível
+  até configurar. Ver corrigir.txt para detalhes e validação.
 
 6.2 🔴 TELEMETRIA/COLETA DE DADOS DE SAÚDE SEM CONSENTIMENTO — ✅ DESATIVADA
   (01/08, Claude)
