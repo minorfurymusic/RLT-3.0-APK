@@ -24,6 +24,8 @@ export default function Profile() {
   const [keyError, setKeyError] = useState('');
   const [keySuccess, setKeySuccess] = useState(false);
   const [isKeyExpanded, setIsKeyExpanded] = useState(false);
+  const [aiProvider, setAiProvider] = useState(() => localStorage.getItem('rlt_ai_provider') || 'gemini');
+
 
   useEffect(() => {
     setKeyValue(geminiApiKey || '');
@@ -289,12 +291,12 @@ export default function Profile() {
                       <Key className="size-4" />
                     </div>
                     <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-primary text-sm">
-                      {appLanguage === 'pt-BR' ? 'Configuração da API Gemini' : 'Gemini API Setup'}
+                      {appLanguage === 'pt-BR' ? 'Configuração de Inteligência Artificial' : 'AI Engine Configuration'}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-slate-400">
-                      {isGeminiKeyConfigured ? (appLanguage === 'pt-BR' ? 'Ativo' : 'Active') : (appLanguage === 'pt-BR' ? 'Não configurado' : 'Not configured')}
+                      {isGeminiKeyConfigured ? (appLanguage === 'pt-BR' ? 'Configurado' : 'Configured') : (appLanguage === 'pt-BR' ? 'Não configurado' : 'Not configured')}
                     </span>
                     <ChevronRight className={cn("size-4 text-slate-400 transition-transform duration-200", isKeyExpanded && "rotate-90")} />
                   </div>
@@ -311,31 +313,62 @@ export default function Profile() {
                     >
                       <p className="text-xs text-slate-500 leading-relaxed">
                         {appLanguage === 'pt-BR' 
-                          ? 'O RLT utiliza esta chave para habilitar o Smart Scan de exames, o Assistente de IA e as análises de nutrição/exercícios de forma local e segura.' 
-                          : 'RLT uses this key to enable exam Smart Scan, AI Assistant, and nutrition/exercise analyses locally and securely.'
+                          ? 'Selecione o provedor e insira sua chave de API para rodar as análises clínicas, scanner inteligente de exames e o assistente de voz offline/online.' 
+                          : 'Select your preferred AI provider and enter your API key to run clinical analysis, exam scanning, and chat assistant.'
                         }
                       </p>
 
-                      <div className="space-y-2">
-                        <div className="relative">
-                          <input
-                            type={showKey ? 'text' : 'password'}
-                            value={keyValue}
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                            {appLanguage === 'pt-BR' ? 'Provedor de IA' : 'AI Provider'}
+                          </label>
+                          <select
+                            value={aiProvider}
                             onChange={(e) => {
-                              setKeyValue(e.target.value);
+                              const p = e.target.value;
+                              setAiProvider(p);
+                              localStorage.setItem('rlt_ai_provider', p);
                               setKeyError('');
                               setKeySuccess(false);
                             }}
-                            placeholder="AIzaSy..."
-                            className="w-full pl-3 pr-10 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono text-slate-800 dark:text-slate-200"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowKey(!showKey)}
-                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                            className="w-full p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary font-semibold text-slate-800 dark:text-slate-200"
                           >
-                            {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                          </button>
+                            <option value="gemini">Google Gemini (Gratuito/Oficial)</option>
+                            <option value="openai">OpenAI (GPT-4o/GPT-4o-mini)</option>
+                            <option value="claude">Anthropic Claude (3.5 Sonnet)</option>
+                            <option value="deepseek">DeepSeek Chat</option>
+                            <option value="kimi">Moonshot Kimi (China)</option>
+                            <option value="qwen">Alibaba Qwen (China)</option>
+                            <option value="groq">Groq (Llama 3)</option>
+                            <option value="openrouter">OpenRouter (Modelos Livres/Gerais)</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                            {appLanguage === 'pt-BR' ? 'Chave de API' : 'API Key'}
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showKey ? 'text' : 'password'}
+                              value={keyValue}
+                              onChange={(e) => {
+                                setKeyValue(e.target.value);
+                                setKeyError('');
+                                setKeySuccess(false);
+                              }}
+                              placeholder={aiProvider === 'gemini' ? 'AIzaSy...' : 'sk-...'}
+                              className="w-full pl-3 pr-10 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary font-mono text-slate-800 dark:text-slate-200"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowKey(!showKey)}
+                              className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                            >
+                              {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                            </button>
+                          </div>
                         </div>
 
                         {keyError && (
@@ -347,7 +380,7 @@ export default function Profile() {
                         {keySuccess && (
                           <div className="flex items-center gap-1 text-[10px] font-medium text-emerald-500 mt-1">
                             <Check className="size-3 flex-shrink-0" />
-                            <span>{appLanguage === 'pt-BR' ? 'Salvo com sucesso!' : 'Saved successfully!'}</span>
+                            <span>{appLanguage === 'pt-BR' ? 'Chave salva com sucesso!' : 'Key saved successfully!'}</span>
                           </div>
                         )}
                       </div>
@@ -363,16 +396,14 @@ export default function Profile() {
                               setKeyError(appLanguage === 'pt-BR' ? 'Por favor, insira uma chave.' : 'Please enter a key.');
                               return;
                             }
-                            if (trimmed.length < 20) {
+                            if (trimmed.length < 15) {
                               setKeyError(appLanguage === 'pt-BR' ? 'Chave muito curta.' : 'Key is too short.');
                               return;
                             }
                             const lowerKey = trimmed.toLowerCase();
-                            if (!lowerKey.startsWith('aizasy') && !lowerKey.startsWith('alzasy') && !lowerKey.startsWith('aq')) {
-                              if (trimmed.length < 25) {
-                                setKeyError(appLanguage === 'pt-BR' ? 'A chave deve ser uma API Key do Gemini (ex: AIzaSy... ou AQ...).' : 'Key must be a Gemini API Key (e.g., AIzaSy... or AQ...).');
-                                return;
-                              }
+                            if (aiProvider === 'gemini' && !lowerKey.startsWith('aizasy') && !lowerKey.startsWith('alzasy') && !lowerKey.startsWith('aq')) {
+                              setKeyError(appLanguage === 'pt-BR' ? 'A chave deve ser uma API Key do Gemini (ex: AIzaSy...).' : 'Key must be a Gemini API Key (e.g., AIzaSy...).');
+                              return;
                             }
                             saveGeminiApiKey(trimmed);
                             setKeySuccess(true);
@@ -380,7 +411,7 @@ export default function Profile() {
                           className="flex-1 py-2 px-3 bg-primary text-white rounded-xl font-bold text-xs shadow-md shadow-primary/10 active:scale-95 transition-all flex items-center justify-center gap-1"
                         >
                           <Check className="size-3.5" />
-                          {appLanguage === 'pt-BR' ? 'Salvar' : 'Save'}
+                          {appLanguage === 'pt-BR' ? 'Salvar Chave' : 'Save Key'}
                         </button>
 
                         {isGeminiKeyConfigured && (
@@ -402,16 +433,25 @@ export default function Profile() {
 
                       <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-[10px] text-slate-500 leading-relaxed">
                         {appLanguage === 'pt-BR' 
-                          ? 'Não tem uma chave? Crie uma 100% gratuita clicando no link:' 
-                          : 'No key yet? Create one 100% free by clicking the link:'
+                          ? `Como obter a chave de API para o ${aiProvider.toUpperCase()}:` 
+                          : `How to get the API Key for ${aiProvider.toUpperCase()}:`
                         }
                         <a
-                          href="https://aistudio.google.com/app/apikey"
+                          href={
+                            aiProvider === 'gemini' ? 'https://aistudio.google.com/app/apikey' :
+                            aiProvider === 'openai' ? 'https://platform.openai.com/api-keys' :
+                            aiProvider === 'claude' ? 'https://console.anthropic.com/settings/keys' :
+                            aiProvider === 'deepseek' ? 'https://platform.deepseek.com/api_keys' :
+                            aiProvider === 'kimi' ? 'https://platform.moonshot.cn/console/api-keys' :
+                            aiProvider === 'qwen' ? 'https://dashscope.console.aliyun.com/apiKey' :
+                            aiProvider === 'groq' ? 'https://console.groq.com/keys' :
+                            'https://openrouter.ai/keys'
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="block mt-1 font-bold text-primary hover:underline"
                         >
-                          {appLanguage === 'pt-BR' ? 'Obter Chave de API Grátis ↗' : 'Get Free API Key ↗'}
+                          {appLanguage === 'pt-BR' ? 'Obter Chave Oficial ↗' : 'Get Official Key ↗'}
                         </a>
                       </div>
                     </motion.div>

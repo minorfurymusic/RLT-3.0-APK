@@ -6,7 +6,9 @@ import { Language, getTranslation } from '../lib/i18n';
 import { safeLocalStorage } from '../lib/utils';
 
 import { sensorService } from '../services/sensorService';
+import { healthConnectService } from '../services/healthConnectService';
 import { googleSignIn, logoutGoogle, createGoogleEvent, deleteGoogleEvent, fetchGoogleEvents, setAccessToken } from '../services/googleCalendarService';
+
 import SystemPermissionsModal from '../components/SystemPermissionsModal';
 
 interface HealthContextType {
@@ -106,7 +108,9 @@ interface HealthContextType {
   geminiApiKey: string | null;
   saveGeminiApiKey: (key: string | null) => void;
   isGeminiKeyConfigured: boolean;
+  syncHealthConnectData: () => Promise<void>;
 }
+
 
 const HealthContext = createContext<HealthContextType | undefined>(undefined);
 
@@ -343,11 +347,15 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       if (document.visibilityState === 'visible') {
         const current = sensorService.getSteps();
         setSensorSteps(current);
+        syncHealthConnectData();
       }
     };
 
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
+
+    // Initial sync
+    syncHealthConnectData();
 
     return () => {
       sensorService.stopListening();
@@ -356,9 +364,63 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+
+  const syncHealthConnectData = async () => {
+    try {
+      const available = await healthConnectService.isAvailable();
+      if (!available) return;
+
+      const steps = await healthConnectService.fetchTodaySteps();
+      if (steps > 0) {
+        updateSensorSteps(steps);
+      }
+
+      const calories = await healthConnectService.fetchTodayCaloriesBurned();
+      if (calories > 0) {
+        addRecord('burned_calories', calories);
+      }
+
+      const weight = await healthConnectService.fetchLatestWeight();
+      if (weight && weight > 0) {
+        updateProfile({ weight });
+      }
+
+      const hr = await healthConnectService.fetchTodayHeartRate();
+      if (hr) {
+        await addHistoryRecord({
+          category: 'Routine Vitals',
+          subtype: 'Blood Pressure',
+          date: new Date().toISOString(),
+          title: 'Frequência Cardíaca (Health Connect)',
+          notes: [
+            {
+              id: 'hc-sync-note-' + Date.now(),
+              date: new Date().toISOString(),
+              text: 'Sincronizado automaticamente via Health Connect'
+            }
+          ],
+          bloodPressure: {
+            systolic: 120,
+            diastolic: 80,
+            pulse: hr.avg
+          }
+        } as any);
+      }
+      console.log('Health Connect sync successfully completed');
+    } catch (e) {
+      console.warn('Health Connect sync error:', e);
+    }
+  };
+
   const requestSensorPermission = async () => {
+    try {
+      await healthConnectService.requestPermissions();
+    } catch (e) {
+      console.warn('Health Connect requestPermissions error:', e);
+    }
     return await sensorService.requestPermission();
   };
+
 
   const [gymLogs, setGymLogs] = useState<GymWorkoutLog[]>(() => {
     return safeLocalStorage.getParsed<GymWorkoutLog[]>('health_gym_logs', []);
@@ -2056,7 +2118,8 @@ export function HealthProvider({ children }: { children: React.ReactNode }) {
       generateDebugLog,
       geminiApiKey,
       saveGeminiApiKey,
-      isGeminiKeyConfigured
+      isGeminiKeyConfigured,
+      syncHealthConnectData
     }}>
       <SystemPermissionsModal isOpen={isPermissionsModalOpen} onClose={closePermissionsModal} />
       {children}
