@@ -520,6 +520,181 @@ decisão do responsável do projeto — nenhum código foi alterado por Claude.
   usuário uma funcionalidade que não existe de verdade.
 
 ================================================================================
+PARTE 7 — BUGS ENCONTRADOS EM TESTE REAL NO AI STUDIO (01/08/2026)
+================================================================================
+Testado pelo responsável do projeto na branch claude/rlt-3-apk-diagnostico-2wgdv5
+importada diretamente para o Google AI Studio. Todos os itens abaixo foram
+investigados por leitura de código (root cause), SEM alterar nada — pedido
+explícito de só documentar desta vez.
+
+PERGUNTA CENTRAL DO RESPONSÁVEL DO PROJETO: "isso é pq mudamos do web pro
+APK, que quebrou todas as funções?"
+RESPOSTA: NÃO. O que está rodando no preview do AI Studio é a própria
+versão web (Vite), a mesma base de código que o Capacitor empacota pro
+APK — não existe "conversão" que quebre coisas nesse sentido. Todo bug
+listado abaixo está no código React/TypeScript compartilhado
+(src/components, src/context) e vai aparecer IGUAL no APK gerado depois,
+porque o APK só embala esse mesmo bundle numa WebView nativa. Não é uma
+característica exclusiva do web nem do Android — é o mesmo bug nos dois.
+
+7.1 "Clear All" das notificações remove uma por vez
+  [ ] NÃO É BUG na função em si. `clearAllNotifications` (HealthContext.tsx
+      ~945-950) limpa os dois arrays de uma vez só (setNotifications([]) +
+      setDismissedNotificationIds([])), sem loop, sem bug de closure.
+      EXPLICAÇÃO MAIS PROVÁVEL: Home.tsx só mostra 2 notificações por vez
+      na tela (`.slice(0, 2)`, ~linha 147), e cada card tem seu próprio "X"
+      individual que chama `dismissNotification` (remove uma por vez, de
+      propósito). Provavelmente o teste usou esse "X" de cada card em vez
+      do botão de texto "Clear All" — os dois convivem na mesma tela e são
+      fáceis de confundir. Vale considerar deixar mais claro visualmente
+      qual botão faz o quê (não fiz essa mudança, só documentando).
+
+7.2 Perguntas do Health Score (quiz de bem-estar mental) não vêm em
+    português mesmo com o idioma selecionado em PT
+  [ ] CONFIRMADO — bug real de prompt. Em Home.tsx (~578-582), o prompt
+      que gera as perguntas menciona `appLanguage` só como dado
+      descritivo ("The user's current language is pt-BR"), nunca como
+      instrução imperativa. A função irmã `handleFinish`, no mesmo
+      arquivo (~654-658), faz certo: tem um bloco explícito "INSTRUÇÕES DE
+      IDIOMA... Responda exclusivamente no idioma: ${appLanguage}". Falta
+      exatamente esse tipo de instrução em `generateQuestions`.
+  [ ] RESPOSTA À PERGUNTA "passa pelo Cérebro?": NÃO. `generateQuestions`
+      chama `getGoogleGenAI()` de `lib/ai.ts` diretamente — não importa
+      nem usa nada de `lib/brainOrchestrator.ts` (confirmado por busca no
+      arquivo inteiro, zero ocorrências). É uma chamada de IA separada,
+      fora do escopo do Cérebro. Se no futuro quiser que todo texto
+      gerado por IA passe por um padrão único de idioma, esse é um dos
+      pontos que ficaria de fora sem uma correção própria.
+
+7.3 Perfil "puxou dados", deveria vir zerado
+  [ ] CONFIRMADO — duas causas combinadas:
+      (a) O perfil padrão (`defaultProfile` em HealthContext.tsx
+          ~238-270) não é 100% vazio: `sex: 'Male'`, `stepGoal: 8000`,
+          `avatar` já aponta pra uma foto de estoque real (mulher, do
+          Unsplash), `workActivityType`/`sleepQuality` com valores
+          padrão. Só nome/e-mail/peso/altura/idade vêm realmente zerados.
+          As Metas de Saúde (`DEFAULT_GOALS`) também já vêm com 2 metas
+          pré-marcadas (Proteína e Hidratação).
+      (b) Existe uma rotina de limpeza única (HealthContext.tsx ~138-164)
+          que só apaga os dados salvos (`health_profile` etc.) na
+          PRIMEIRA vez que o app roda naquele navegador — ela grava uma
+          flag (`real_life_track_v2_cleaned`) e nunca mais limpa depois
+          disso, mesmo que você queira testar "do zero" de novo no mesmo
+          Chrome/perfil do AI Studio. Se esse navegador já rodou o app
+          antes, os dados antigos continuam voltando sempre.
+      Isso também explica em parte o item 7.8 abaixo (consulta que
+      "voltou" pode ser só dado antigo que nunca foi limpo).
+
+7.4 Trocou sexo pra "Homem", mas a foto de fundo continua sendo mulher
+  [ ] CONFIRMADO — bug real, simples. O campo `avatar` do perfil é
+      totalmente independente do campo `sex` em todo o código (Profile.tsx,
+      Home.tsx, HealthContext.tsx) — não existe NENHUMA lógica que troque
+      a foto com base no gênero. A foto de mulher é só o valor padrão
+      fixo (`defaultProfile.avatar`, mesma URL do Unsplash citada acima) e
+      nunca muda sozinha — só troca se você fizer upload ou "tirar foto"
+      manualmente (ver 7.5).
+
+7.5 Botão "Tirar Foto" troca a foto sozinho — é por causa do Chrome sem
+    câmera de verdade?
+  [ ] SUA TEORIA NÃO É O MOTIVO (mas o resultado bate por acaso). O botão
+      "Tirar Foto" (Profile.tsx ~55-59) não tenta acessar câmera nenhuma,
+      em nenhuma plataforma — nem web nem Android. É código fixo:
+      `const simulatedPhoto = "https://picsum.photos/seed/user/400/400";
+      setAvatar(simulatedPhoto);`. Ele literalmente troca a foto por essa
+      imagem de estoque fixa sempre que é clicado, em qualquer navegador
+      ou aparelho — nunca chegou a usar a câmera de verdade
+      (MediaDevices/getUserMedia) nem o `capture` de input de arquivo. O
+      upload normal (escolher arquivo) esse sim funciona de verdade.
+
+7.6 Botões Privacy & Security, Language, Help & Support não funcionam
+  [ ] NÃO CONFIRMADO NO CÓDIGO — precisa reproduzir de novo com mais
+      detalhe. Reli Profile.tsx e App.tsx: os três `onClick` chamam
+      `navigate('/profile/privacy')`, `navigate('/profile/language')` e
+      `navigate('/profile/help')`; as três rotas existem em App.tsx
+      apontando pros componentes certos; os componentes de destino
+      importam ícones e funções que realmente existem (sem import
+      quebrado). Não achei nenhum defeito de código que explique "não
+      funciona". Hipóteses pra investigar quando puder reproduzir de
+      novo: (a) cache de build antigo no preview do AI Studio (ver 7.7
+      abaixo, mesmo suspeito), (b) algum erro específico do ambiente do
+      AI Studio que não aparece lendo o código estaticamente. Se
+      acontecer de novo, seria bom você me descrever o que exatamente
+      acontece ao clicar (nada visível? mensagem de erro? volta pra
+      Home?).
+
+7.7 Log Out não funciona
+  [ ] CONFIRMADO — bug real, e na verdade tem DOIS botões de "Log Out"
+      diferentes dentro do Profile.tsx, nenhum dos dois faz um logout de
+      verdade:
+      (a) "Sair da Conta Google" (~566-578) chama a função `logout` do
+          context, que só desconecta o Google Calendar
+          (`setGoogleUser(null)`) — nunca remove a flag `health_login` do
+          localStorage que o App.tsx usa pra decidir se mostra a tela de
+          Login. Resultado: clica, nada muda visivelmente, você continua
+          no Perfil. Bate exatamente com "não funciona".
+      (b) O outro botão "Log Out" (~582-591) faz algo diferente do que o
+          nome sugere: zera a flag de onboarding e manda pra tela de
+          Onboarding — também não desloga de verdade (não mexe em
+          `health_login` nem no Google).
+      Nenhum dos dois volta pra tela de Login. Isso é diferente do bug do
+      item 7.5 do login (onLoginSuccess) que já corrigimos — aqui o
+      problema é a ausência do caminho inverso (logout).
+
+7.8 Botão de "Log Out" no topo da tela funciona, mas está sobreposto na
+    Home
+  [ ] MUITO PROVÁVEL: CACHE ANTIGO NO NAVEGADOR/PREVIEW, não código atual.
+      Conferido: o `Layout.tsx` ATUAL não tem nenhum botão de logout no
+      topo — só a marca e um badge de diagnóstico (ícone de CPU, abre o
+      DiagnosticModal). Um botão de logout flutuante (`position: absolute,
+      top-4 right-4`) REALMENTE existiu no header do Layout.tsx num
+      commit anterior (15f007a) — com posicionamento que bate exatamente
+      com "sobreposto na tela inicial" — e foi removido num commit
+      seguinte (ab4ac95), confirmado ainda ausente no HEAD atual da
+      branch. Ou seja: o código de hoje não tem esse botão, mas o que
+      você está vendo rodar tem o comportamento do botão antigo (inclusive
+      "funciona" — o antigo realmente limpava o login e recarregava).
+      Suspeita mais forte: o app registra um Service Worker (visto em
+      lib/version.ts/DiagnosticModal), e o preview do AI Studio pode estar
+      servindo um bundle JS em cache de antes dessa remoção. Vale tentar
+      um refresh forçado / limpar dados do site no preview antes de
+      concluir que é um bug de código.
+
+7.9 Consulta médica apagada continua aparecendo na Daily Agenda
+  [ ] CONFIRMADO, DUAS EXPLICAÇÕES POSSÍVEIS (a mais provável é a
+      primeira, ligada ao item 7.3):
+      (a) MAIS PROVÁVEL: é dado antigo que nunca foi limpo. Como o item
+          7.3 mostrou, a limpeza de dados salvos só roda uma vez por
+          navegador (flag permanente). Se esse "Doctor Appointment /
+          General Checkup" já existia de um teste anterior no mesmo
+          Chrome/preview, ele nunca foi apagado de verdade — e como
+          confirmei que "Dr. Smith"/"General Checkup" NÃO é um texto fixo
+          no código (não é dado de exemplo/demo, busquei no código
+          inteiro e não achei), isso reforça que é dado real de um teste
+          anterior que sobrou.
+      (b) BUG REAL TAMBÉM ENCONTRADO, independente do (a): a função
+          `deleteHistoryRecord` (HealthContext.tsx ~1469-1473) remove o
+          registro local e o evento local vinculado, mas — diferente da
+          função `deleteEvent` (~1138-1148), que também chama
+          `deleteGoogleEvent` pra apagar no Google Calendar — ela NUNCA
+          chama `deleteGoogleEvent`. Se esse compromisso já tinha sido
+          sincronizado com o Google Calendar antes (o que exige Firebase
+          configurado de verdade, então é menos provável ter acontecido
+          neste ambiente de teste específico), a cópia remota sobrevive e
+          volta na próxima sincronização. Vale corrigir isso de qualquer
+          forma mais pra frente, mesmo que não seja a causa principal
+          agora.
+
+7.10 Agenda do Google não funciona e não pede permissão
+  [ ] MESMA CAUSA RAIZ já documentada na Parte 6/corrigir.txt: sem
+      Firebase configurado no ambiente (variáveis FIREBASE_*), o botão
+      "Conectar" do Calendar.tsx chama a mesma `connectGoogleCalendar`
+      que cai direto no usuário mock — nunca chega a abrir o popup real
+      do Google, então nunca pede permissão. Não é um bug novo nem
+      específico da Agenda; é o mesmo problema de configuração ausente
+      que afeta o login também. Só será resolvido configurando credenciais
+      reais do Firebase no ambiente onde o app for rodar de verdade.
+
+================================================================================
 FIM DO PLANO — marcar itens conforme forem implementados, testados em
 execução real e commitados. Ver corrigir.txt para o changelog de execução
 (que hoje só tem uma entrada — a auditoria de segredo original — e precisa
