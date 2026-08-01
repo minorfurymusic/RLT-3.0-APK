@@ -24,8 +24,15 @@ COMO USAR ESTE DOCUMENTO (para quem for implementar):
     do zero — nunca existiu no repositório antes deste plano).
 
 --------------------------------------------------------------------------------
-PARTE 1 — CÉREBRO (IA / "RLT ENGINE") — PRIORIDADE MÁXIMA
+PARTE 1 — CÉREBRO (IA / "RLT ENGINE") — PRIORIDADE MÁXIMA E ABSOLUTA
 --------------------------------------------------------------------------------
+O Cérebro é o componente mais importante de todo o aplicativo — nada mais no
+app tem prioridade igual ou maior que ele. É esperado e aceitável que esta
+parte leve várias sessões/iterações de trabalho para ficar completa; não
+tente atalhar para "fechar rápido" e avançar para a Parte 2 antes dela estar
+de fato pronta e validada (não só compilando — testada de verdade,
+executando comandos reais e conferindo que a ação certa aconteceu no app).
+
 Referência: src/lib/brainOrchestrator.ts (1254 linhas), brainOrchestratorTest.ts,
 lib/i18n.ts, lib/imageCompressor.ts, lib/logger.ts, lib/version.ts,
 components/AIAssistant.tsx (817 linhas) no repositório C-rebro.
@@ -106,12 +113,36 @@ comandos — é o maior gargalo funcional do app inteiro.
 --------------------------------------------------------------------------------
 PARTE 2 — HEALTH CONNECT (substituto oficial do Google Fit) — PRIORIDADE 2
 --------------------------------------------------------------------------------
-Decisão confirmada: usar Health Connect (androidx.health.connect), não a API
-legada do Google Fit (em descontinuação pelo Google) nem só o acelerômetro
-puro do Capacitor. Health Connect precisa: (a) o app Health Connect instalado
-no aparelho (nativo a partir do Android 14, instalável em versões antes
-disso), (b) declarar permissões de leitura/escrita por tipo de dado, (c) o
-usuário conceder essas permissões pela UI do próprio Health Connect.
+Decisão confirmada: usar Health Connect (androidx.health.connect) como fonte
+PRIMÁRIA de passos/distância/calorias/frequência cardíaca/peso, não a API
+legada do Google Fit (em descontinuação pelo Google).
+
+ATENÇÃO — HISTÓRICO CONHECIDO DE FALHA: uma implementação anterior baseada
+em acelerômetro nativo puro (StepHistoryService / Kotlin foreground service,
+de uma versão antiga deste mesmo projeto antes da reescrita atual em
+Vite+Capacitor) NUNCA funcionou de verdade em uso real, apesar de ter sido
+dada como "implementada" na época. Por isso:
+  - Health Connect é a via preferida sempre que possível — é a API oficial
+    do Google para isso, mais confiável que reimplementar detecção de passos
+    na mão.
+  - SÓ SE Health Connect se mostrar genuinamente inviável (ex.: plugin
+    Capacitor de Health Connect não existir maduro o suficiente e não for
+    viável escrever uma ponte nativa própria em tempo hábil), aí sim
+    reconstruir a contagem de passos via acelerômetro nativo — mas DO ZERO,
+    sem reaproveitar/copiar a implementação antiga que não funcionava.
+  - CRITÉRIO DE PRONTO (Definition of Done) para qualquer item desta Parte
+    2, seja via Health Connect ou via acelerômetro novo: não basta o código
+    compilar. É preciso validar em execução real (emulador com sensores
+    simulados ou aparelho físico) que o valor de passos/distância muda de
+    verdade com movimento real, e registrar essa validação em corrigir.txt
+    (como foi testado, em que ambiente, resultado observado). Marcar [x]
+    sem essa validação é proibido — foi exatamente isso que fez a tentativa
+    anterior "nunca funcionar" mesmo constando como pronta.
+
+Health Connect precisa: (a) o app Health Connect instalado no aparelho
+(nativo a partir do Android 14, instalável em versões antes disso), (b)
+declarar permissões de leitura/escrita por tipo de dado, (c) o usuário
+conceder essas permissões pela UI do próprio Health Connect.
 
 2.1 Infraestrutura nativa
   [ ] Adicionar dependência do Health Connect Client
@@ -336,10 +367,22 @@ do responsável do projeto.
   [ ] Login real (substituir stub admin/123456 hardcoded) — ligado à Parte
       2 se usar Google Sign-In para Health Connect/Calendar, aproveitar a
       mesma implementação de auth
-  [ ] Tirar a chave da API Gemini do bundle do cliente — resolver
-      naturalmente junto com 4.7 (configuração de chave pelo usuário) e
-      com a Parte 1 (reconstrução do Cérebro já mexe em todos os pontos
-      que instanciam o cliente Gemini)
+  [x] Verificado (01/08/2026, por Claude): NÃO existe chave de API literal
+      commitada neste repositório nem em nenhum commit do histórico —
+      apenas .env.example com placeholder, sem .env.local rastreado. O
+      risco é arquitetural, não um segredo já vazado: vite.config.ts injeta
+      `process.env.GEMINI_API_KEY` no bundle do cliente em tempo de build
+      via `define`, então qualquer chave real presente no ambiente de build
+      acaba compilada dentro do JS final. ANTIGRAVITY: rodar a mesma
+      verificação no repositório local (`git log --all -p | grep -o
+      "AIzaSy[A-Za-z0-9_-]\{33\}"` e conferir se existe `.env.local` com
+      chave real no disco) e, se encontrar algo, remover e trocar a chave
+      imediatamente (chave pode já estar comprometida se algum build local
+      com ela foi gerado).
+  [ ] Tirar a chave da API Gemini do bundle do cliente (a causa raiz acima,
+      não apenas o sintoma) — resolver naturalmente junto com 4.7
+      (configuração de chave pelo usuário) e com a Parte 1 (reconstrução do
+      Cérebro já mexe em todos os pontos que instanciam o cliente Gemini)
   [ ] ErrorBoundary global — priorizar mesmo assim, porque impacta
       diretamente a confiabilidade do Cérebro (Parte 1): sem isso, uma
       resposta malformada da IA derruba o app inteiro com tela branca.
