@@ -1,0 +1,368 @@
+================================================================================
+DIAGNÓSTICO COMPLETO — RLT 3.0 APK vs. Versão Web/PWA (Real Life Track)
+================================================================================
+Gerado em: 01/08/2026
+Repositório analisado (A – app atual, com problemas): minorfurymusic/rlt-3.0-apk
+                                                        branch: claude/rlt-3-apk-diagnostico-2wgdv5
+Repositório de referência (B – versão web/PWA mais completa): github.com/jeanrsl098/C-rebro (clonado localmente para leitura)
+
+ARQUIVO TEMPORÁRIO: este relatório deve ser apagado antes do programa ir ao ar,
+conforme solicitado. Nenhum arquivo de código-fonte do app foi alterado durante
+esta análise — apenas leitura, comparação, `npm install` local, `tsc --noEmit`
+e `npm run build` para checagem de erros (nenhuma dessas ações modificou
+arquivos versionados; a alteração incidental em package-lock.json gerada pelo
+`npm install` foi revertida antes deste commit).
+
+--------------------------------------------------------------------------------
+0. FONTES E METODOLOGIA
+--------------------------------------------------------------------------------
+Ordem seguida conforme solicitado:
+
+1. Procurado o arquivo "corrigir.txt" no repositório atual — NÃO ENCONTRADO.
+   - Não existe na árvore de trabalho atual.
+   - Não existe em nenhum commit do histórico (`git log --all --full-history`).
+   - Não existe no repositório de referência C-rebro.
+   - Único achado relacionado: commits antigos com mensagens contendo a palavra
+     "corrigir" (ex.: "fix: restaurar estrutura completa do projeto e corrigir
+     erros"), mas nenhum arquivo com esse nome. Se este arquivo deveria existir,
+     ele nunca foi commitado neste repositório, ou o nome/caminho está diferente
+     do esperado.
+
+2. Tentativa de acesso a https://real-life-track.ai.studio — FALHOU (HTTP 403
+   Forbidden). É um app publicado no Google AI Studio, que aparentemente
+   bloqueia acesso automatizado/sem sessão autenticada. Conforme instruído,
+   segui para a alternativa.
+
+3. Análise via GitHub: https://github.com/jeanrsl098/C-rebro.git — SUCESSO.
+   Repositório clonado e analisado por completo (código-fonte, configuração
+   Android, PWA, dependências). Este é claramente uma versão mais recente e
+   mais completa do mesmo app (mesmo appId com.reallifetrack.app, mesmo nome
+   "Real Life Track"), usada aqui como parâmetro de comparação ("a versão web").
+
+4. Comparação de código realizada arquivo a arquivo entre os dois repositórios
+   (diff estrutural + leitura funcional), cobrindo 100% dos arquivos-fonte de
+   ambos (~9.800 linhas em A vs. ~22.800 linhas em B — a versão de referência
+   tem mais que o DOBRO de código).
+
+5. Verificação de build do app atual (A): `npm install`, `npx tsc --noEmit` e
+   `npm run build`.
+
+--------------------------------------------------------------------------------
+1. RESULTADO DO BUILD/COMPILAÇÃO — ACHADO IMPORTANTE
+--------------------------------------------------------------------------------
+O app atual (RLT 3.0 APK) COMPILA e FAZ BUILD SEM ERROS:
+  - `npx tsc --noEmit` → 0 erros de tipo.
+  - `npm run build` (vite build) → build concluído com sucesso em 8.62s,
+    gerando dist/ normalmente (único aviso: bundle único de 956 KB sem
+    code-splitting, que é um problema de performance, não um erro).
+
+CONCLUSÃO: os "muitos erros" percebidos ao comparar com a versão web NÃO são
+erros de compilação/build. São lacunas funcionais massivas — telas, serviços,
+bibliotecas e integrações inteiras que existem na versão de referência e
+simplesmente NÃO EXISTEM no app atual — além de alguns bugs funcionais reais
+(dados falsos/mockados, botões sem ação, autenticação falsa). Detalhado abaixo.
+
+--------------------------------------------------------------------------------
+2. VISÃO GERAL DO TAMANHO/ESCOPO
+--------------------------------------------------------------------------------
+                              App Atual (A)      Versão Web/Ref. (B)
+  Linhas de código (src/)     ~9.813             ~22.825  (+133%)
+  Componentes de tela         17                 26  (+9 telas exclusivas)
+  Arquivos em src/lib/        1 (utils.ts)        8 (utils, ai, brainOrchestrator,
+                                                     brainOrchestratorTest, i18n,
+                                                     imageCompressor, lgpd, logger,
+                                                     version)
+  Arquivos em src/services/   1 (aiMedicalService) 3 (sensorService, locationService,
+                                                     googleCalendarService)
+  Idiomas suportados          0 (texto fixo)      12 (pt-BR, en-US, es-ES, fr-FR,
+                                                     de-DE, it-IT, ja-JP, zh-CN,
+                                                     ru-RU, ar-SA, hi-IN, ko-KR)
+  Dependências extras em B    @capacitor/haptics, @capacitor/local-notifications,
+                              @capacitor/motion, @capacitor/app, firebase,
+                              html2canvas, jsonrepair, recharts
+  Infraestrutura servidor     Nenhuma (SPA pura)  Express (server.ts) com proxy
+                                                     seguro para a API Gemini
+  PWA (manifest/service       Ausente             Presente (public/manifest.json,
+  worker/ícones)                                    sw.js, ícones 192/512)
+
+--------------------------------------------------------------------------------
+3. BUGS CRÍTICOS E CONCRETOS (por severidade)
+--------------------------------------------------------------------------------
+
+[CRÍTICO] Login falso / sem autenticação real
+  Arquivo: src/components/Login.tsx
+  - Login é um stub local: usuário/senha fixos no código (`admin` / `123456`),
+    sem backend, sem OAuth. Ao "logar", só grava `health_login=true` no
+    localStorage. Qualquer pessoa pode ler o código-fonte do APK e descobrir
+    a senha, ou simplesmente escrever a chave manualmente no localStorage via
+    devtools para entrar sem senha nenhuma.
+  - Na versão web, o login usa Google OAuth real (Firebase Auth) via
+    `connectGoogleCalendar()`.
+
+[CRÍTICO] Contagem de passos permanentemente falsa (mockada)
+  Arquivo: src/context/HealthContext.tsx, linha ~607
+  - `getTodayValue('steps')` retorna o valor fixo `7240` incondicionalmente,
+    comentado no código como "Mocked synced steps". O mesmo número falso
+    (7240) também é usado como fallback nos cálculos de calorias/passos em
+    outros pontos do mesmo arquivo (linhas ~338 e ~439).
+  - Resultado prático: o anel de passos na Home, o card de Score de Saúde e
+    qualquer cálculo de calorias gastas por atividade estão sempre exibindo
+    (ou influenciados por) um número inventado, nunca o valor real do usuário.
+  - Causa raiz: não existe nenhum serviço de sensor (equivalente a
+    src/services/sensorService.ts da versão web) nem o plugin
+    @capacitor/motion instalado. O AndroidManifest.xml do app atual também
+    NÃO possui as permissões ACTIVITY_RECOGNITION / BODY_SENSORS necessárias
+    (ver seção 7).
+
+[CRÍTICO] Chave de API do Gemini exposta no bundle do cliente
+  Arquivos: src/services/aiMedicalService.ts, src/components/Home.tsx,
+  src/components/Exercises.tsx (2x), src/components/Nutrition.tsx,
+  src/components/AIAssistant.tsx
+  - Em 5 pontos diferentes do código, `new GoogleGenAI({apiKey:
+    process.env.GEMINI_API_KEY})` é instanciado diretamente no cliente,
+    com a chave injetada em tempo de build (vite.config.ts define
+    `process.env.GEMINI_API_KEY` estaticamente). Isso significa que a chave
+    da API fica embutida no bundle JavaScript final, visível a qualquer
+    pessoa que inspecione o APK/arquivos estáticos.
+  - A versão web resolve isso com um proxy de servidor (server.ts, endpoint
+    `/api/gemini`) e permite ao usuário configurar sua própria chave via
+    Perfil, sem nunca embutir uma chave fixa no bundle.
+
+[CRÍTICO] Sem tratamento de erros / sem tela de recuperação (crash = tela branca)
+  Arquivos: src/main.tsx (não tem ErrorBoundary nenhum)
+  - Qualquer exceção não tratada — por exemplo, `JSON.parse(response.text)`
+    direto na resposta da IA em vários pontos (sem `safeJsonParse`/reparo de
+    JSON malformado) — derruba o app inteiro para uma tela branca, sem log,
+    sem opção de recarregar, sem diagnóstico.
+  - A versão web tem: ErrorBoundary global, logger de erros persistente
+    (lib/logger.ts, últimos 200 erros com expurgo de 30 dias, exportação de
+    relatório de diagnóstico), parsing de JSON resiliente com biblioteca
+    `jsonrepair`, e um DiagnosticModal acessível pelo próprio app.
+
+[CRÍTICO] Botões e navegação "mortos" (sem função) no Perfil
+  Arquivo: src/components/Profile.tsx
+  - "Privacidade & Segurança", "Idioma" e "Ajuda & Suporte" são botões sem
+    `onClick` (linhas ~298-305) — literalmente não fazem nada ao serem
+    tocados.
+  - O botão "Sair/Log Out" (linhas ~161-163) também não tem `onClick`.
+  - Mesmo que os `onClick` fossem adicionados, as rotas
+    `/profile/privacy`, `/profile/language` e `/profile/help` NÃO EXISTEM em
+    src/App.tsx — falta tanto o componente quanto a rota.
+  - Não há alternância de tema escuro/claro, não há configuração de unidades
+    (métrico/imperial), não há tela de permissões do sistema, e não há
+    NENHUMA forma de o usuário configurar sua própria chave de API Gemini.
+
+[ALTO] Calendário anuncia sincronização que não existe
+  Arquivo: src/components/Calendar.tsx
+  - O modal "Agendar Evento" exibe o texto "Este evento será sincronizado com
+    seu Google e Apple Calendar" — mas não existe NENHUM código de
+    sincronização com Google/Apple Calendar no app atual (o campo
+    `synced?: boolean` em types.ts existe mas nunca é usado/setado). É uma
+    promessa falsa na interface.
+  - A versão web implementa sincronização real via
+    src/services/googleCalendarService.ts (Firebase Auth + Google Calendar
+    REST API).
+
+[ALTO] Assistente de IA ("Cérebro") é um chat simples, sem execução de comandos
+  Arquivo: src/components/AIAssistant.tsx (173 linhas vs. 817 na versão web)
+  - Não existe nenhum motor de interpretação de linguagem natural
+    (equivalente a src/lib/brainOrchestrator.ts, 1254 linhas na versão web)
+    capaz de, por exemplo, entender "bebi 200ml de água" e realmente
+    registrar isso no app. Toda mensagem vai direto para a API Gemini, sem
+    roteamento local, sem fallback offline, sem histórico de sessões
+    persistente, sem entrada por voz, sem anexar imagens.
+  - Sem redação de dados sensíveis (LGPD) antes de enviar informações de
+    perfil/saúde para a IA.
+
+[MÉDIO] Dados de saúde/perfil enviados sem anonimização para a IA (lacuna de
+privacidade/LGPD)
+  Arquivos: src/components/Home.tsx, src/services/aiMedicalService.ts
+  - A versão web possui uma camada inteira de conformidade com a LGPD
+    (src/lib/lgpd.ts): anonimização de peso/idade/localização antes de
+    chamadas de IA e redação de PII em imagens médicas (borrão automático +
+    marca d'água "LGPD ANONYMIZED"). O app atual não tem nada disso — envia
+    dados de perfil e imagens médicas em texto/imagem crus para a API.
+
+[MÉDIO] Registro de água ignora a data selecionada
+  Arquivo: src/components/WaterTracking.tsx, linha ~20
+  - Sempre grava novos registros de água contra `new Date()` (hoje), mesmo
+    que o usuário esteja navegando por uma data passada em outra tela — bug
+    de integridade de dados quando comparado à versão web, que usa a data
+    selecionada global do contexto.
+
+[MÉDIO] Categorias médicas inteiras ausentes
+  Arquivos: src/components/HistoryForm.tsx, src/components/Medical.tsx,
+  src/types.ts
+  - Faltam por completo as categorias "Medicação Contínua" (com agenda de
+    horários de dose e lembretes) e "Sinais Vitais de Rotina" (pressão
+    arterial, glicemia, outros). Os tipos `ContinuousMedicationRecord` e
+    `RoutineVitalsRecord` nem existem em types.ts do app atual — não é só
+    UI faltando, é o modelo de dados que não suporta esses registros.
+  - Não há gráficos de tendência de sinais vitais (a versão web usa
+    `recharts` para isso em Medical.tsx); o app atual não tem a biblioteca
+    `recharts` instalada.
+
+--------------------------------------------------------------------------------
+4. TELAS/COMPONENTES INTEIRAMENTE AUSENTES NO APP ATUAL
+--------------------------------------------------------------------------------
+Estes componentes existem na versão de referência e não têm equivalente
+algum no app atual:
+
+  - PerformanceDashboard.tsx  → Painel "Bio-Status" com gráfico radar
+    (força/nutrição/vitalidade/foco/condicionamento via recharts),
+    diagnóstico gerado por IA, navegação por data, exportação de screenshot
+    (html2canvas). Sem rota /performance no app atual.
+  - ShareModal.tsx  → Exportação/compartilhamento de cards de progresso
+    (biostatus, água, nutrição, atividade) como imagem PNG, com
+    compartilhamento nativo (navigator.share). O botão "Share" da barra
+    inferior do app atual, na verdade, só redireciona para /profile —
+    rótulo enganoso.
+  - DiagnosticModal.tsx  → Painel de diagnóstico embutido no próprio app
+    (versão do build, status do service worker, cache, "force purge &
+    reload"). Ironicamente, é exatamente o tipo de ferramenta que ajudaria a
+    depurar os problemas relatados pelo usuário — e não existe no app atual.
+  - ErrorBoundary.tsx  → Captura global de erros/rejeições não tratadas com
+    tela de recuperação. Ausente — ver bug crítico acima.
+  - SystemPermissionsModal.tsx  → UI para solicitar permissões nativas
+    (sensor de passos, notificações, localização) de forma explicada ao
+    usuário. Ausente — consistente com a falta de permissões no
+    AndroidManifest.xml.
+  - PrivacySecurity.tsx  → Tela de privacidade/LGPD: exportar dados, limpar
+    cache de mídia, visualizar/exportar/limpar logs de erro.
+  - LanguageRegional.tsx  → Seletor de idioma (12 idiomas, incluindo RTL
+    árabe).
+  - HelpSupport.tsx  → Central de ajuda com busca por IA e tutoriais
+    guiados.
+  - RltLogo.tsx  → Componente de logo com fallback de imagem. No app atual,
+    a marca cai para um emoji genérico (🧠) em uma div simples.
+  - Modal.tsx  → Primitivo de modal reutilizável (o app atual duplica um
+    modal local dentro de Profile.tsx em vez de ter um componente
+    compartilhado).
+
+--------------------------------------------------------------------------------
+5. BIBLIOTECAS/SERVIÇOS DE INFRAESTRUTURA INTEIRAMENTE AUSENTES
+--------------------------------------------------------------------------------
+  - src/lib/brainOrchestrator.ts (1254 linhas) — motor de comandos em
+    linguagem natural ("RLT ENGINE V3"): entende frases livres, separa
+    múltiplas intenções numa mesma frase, classifica por domínio (água,
+    refeições, treino, exames, agenda, remédios, perfil, tema) e executa
+    ações reais no app, com log de auditoria.
+  - src/lib/i18n.ts (2136 linhas) — sistema completo de tradução/localização
+    para 12 idiomas. O app atual não tem NENHUM sistema de tradução; todo
+    texto está fixo (a maioria em inglês, misturado com português em
+    alguns pontos).
+  - src/lib/lgpd.ts — anonimização de dados sensíveis e redação de imagens
+    antes de enviar à IA (conformidade com a Lei Geral de Proteção de Dados).
+  - src/lib/logger.ts — captura global de erros, exportação de relatório de
+    diagnóstico.
+  - src/lib/version.ts — versionamento de build, diagnóstico de
+    consistência de cache/service worker, "force purge & reload".
+  - src/lib/imageCompressor.ts — compressão de imagens no cliente antes do
+    upload (evita OOM/timeout em dispositivos móveis ao enviar fotos para a
+    IA).
+  - src/services/sensorService.ts — contador de passos real via acelerômetro
+    nativo (@capacitor/motion), com detecção de picos, keep-alive em
+    segundo plano e broadcast via service worker.
+  - src/services/locationService.ts — rastreamento de distância via GPS
+    (geolocation + fórmula de Haversine) para corrida/caminhada/ciclismo.
+  - src/services/googleCalendarService.ts — login Google real (Firebase
+    Auth) e sincronização bidirecional com Google Calendar.
+  - server.ts — servidor Express próprio com proxy seguro para a API Gemini
+    (evita expor a chave no cliente) e endpoint de health-check.
+  - public/manifest.json, public/sw.js, ícones — o app atual não é
+    instalável como PWA e não tem nenhuma capacidade offline/sincronização
+    em segundo plano (Periodic Background Sync).
+  - Integração Firebase — ausente por completo (nem no package.json nem no
+    código); usada na versão web apenas para autenticação Google.
+
+--------------------------------------------------------------------------------
+6. CONFIGURAÇÃO ANDROID NATIVA (APK) — PERMISSÕES AUSENTES
+--------------------------------------------------------------------------------
+Arquivo: android/app/src/main/AndroidManifest.xml
+
+O app atual só declara `android.permission.INTERNET`. A versão de referência
+declara adicionalmente (todas ausentes no app atual):
+  - ACTIVITY_RECOGNITION, BODY_SENSORS, HIGH_SAMPLING_RATE_SENSORS
+    → necessárias para contagem real de passos (explica o bug do "7240 fixo")
+  - ACCESS_NETWORK_STATE
+  - POST_NOTIFICATIONS
+    → sem isso, notificações locais (lembretes de medicação, etc.) não
+      funcionam no Android 13+
+  - VIBRATE, WAKE_LOCK
+  - FOREGROUND_SERVICE, FOREGROUND_SERVICE_HEALTH, FOREGROUND_SERVICE_LOCATION
+    → necessárias para rastreamento em segundo plano (passos/localização)
+  - ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION
+    → necessárias para rastreamento de distância via GPS
+  - RECEIVE_BOOT_COMPLETED
+    → necessária para retomar serviços após reiniciar o aparelho
+
+Além disso, o app atual não tem os plugins nativos correspondentes instalados
+(@capacitor/haptics, @capacitor/local-notifications, @capacitor/motion,
+@capacitor/app), então mesmo adicionando as permissões no manifest, o código
+JS ainda não teria como usá-las sem também adicionar essas dependências.
+
+Outras diferenças de configuração nativa (build.gradle/styles.xml): a versão
+de referência usa compileSdk/targetSdk 34 fixos (o app atual usa variáveis de
+rootProject), tema com splash screen simplificado e cores da marca
+(#4F46E5/#0F172A) aplicadas nativamente — diferenças cosméticas/de manutenção,
+não bugs funcionais.
+
+--------------------------------------------------------------------------------
+7. ITENS ONDE O APP ATUAL TEM ALGO QUE A VERSÃO WEB NÃO TEM
+--------------------------------------------------------------------------------
+Para justiça na comparação, nem tudo é regressão. Achados nessa direção:
+
+  - Exercises.tsx do app atual tem um componente "TrainingInsights" (IA) que
+    não existe na versão web (provavelmente foi substituído pelo
+    PerformanceDashboard na versão nova).
+  - Layout.tsx do app atual tem um FAB "Quick Add" (atalhos de
+    Calorias/Proteína/Água/Passos/Exercício/Refeição) que a versão web
+    removeu.
+  - HealthConditionsManager.tsx do app atual grava automaticamente uma
+    condição de saúde adicionada também no histórico médico geral
+    (`addHistoryRecord`); a versão web removeu esse comportamento.
+  - data/exerciseLibrary.ts do app atual tem mais exercícios cadastrados
+    (27) do que a versão web (24), embora o conteúdo específico difira.
+  - data/healthConditions.ts é IDÊNTICO byte a byte entre as duas versões.
+
+--------------------------------------------------------------------------------
+8. RECOMENDAÇÕES / PRÓXIMOS PASSOS SUGERIDOS
+--------------------------------------------------------------------------------
+(Apenas diagnóstico — nenhuma alteração foi feita conforme solicitado.)
+
+Prioridade imediata (segurança/dados):
+  1. Substituir o login stub por autenticação real antes de qualquer
+     lançamento público.
+  2. Remover a chave da API Gemini do bundle do cliente; usar proxy de
+     servidor ou permitir chave configurável pelo usuário.
+  3. Adicionar um ErrorBoundary global para evitar tela branca em produção.
+
+Prioridade alta (funcionalidade central quebrada/enganosa):
+  4. Implementar contagem real de passos (sensor + permissões no manifest)
+     ou remover o anel de passos até que seja real, para não exibir dado
+     falso ao usuário.
+  5. Corrigir/remover o aviso de sincronização de calendário no modal de
+     evento, já que a sincronização não existe.
+  6. Corrigir os botões sem `onClick` em Profile.tsx (Privacidade, Idioma,
+     Ajuda, Sair) ou removê-los da UI até terem função.
+
+Prioridade média (paridade de funcionalidades com a versão web):
+  7. Portar (ou reconstruir) i18n.ts, lgpd.ts, logger.ts para trazer
+     tradução multilíngue, conformidade de privacidade e diagnóstico de
+     erros.
+  8. Avaliar portar brainOrchestrator.ts para dar função real ao assistente
+     de IA (hoje é só um chat).
+  9. Adicionar categorias de "Medicação Contínua" e "Sinais Vitais de
+     Rotina" ao modelo de dados e aos formulários.
+  10. Avaliar adicionar manifest.json/service worker para tornar o app
+      instalável como PWA na versão web, se aplicável ao caso de uso.
+
+Observação final: como o build atual compila e roda sem erros técnicos, a
+melhor forma de "ir ao ar" com segurança é tratar este documento como um
+backlog de paridade de produto, priorizando os itens de segurança/dados
+falsos acima antes de qualquer lançamento, e não como uma lista de bugs de
+compilação a corrigir.
+
+================================================================================
+FIM DO RELATÓRIO
+================================================================================
